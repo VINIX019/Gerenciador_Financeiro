@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Usuarios {
+  id    String @id @default(auto()) @map("_id") @db.ObjectId
+  nome  String
+  email String @unique
+  senha String
+}
+
+model Transacoes {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  descricao String
+  valor     Float
+  tipo      String // 'entrada' ou 'saida'
+  userId    String   @db.ObjectId
+  createdAt DateTime @default(now()) // Este campo é essencial para o extrato funcionar
+}
+
+model Investimento {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  nome       String
+  valor      Float
+  quantidade Float
+  tipo       String
+  userId     String   @db.ObjectId
+  createdAt  DateTime @default(now())
+}
