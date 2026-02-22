@@ -11,7 +11,9 @@ app.use(express.json());
 
 // CONFIGURAÇÃO ÚNICA DE CORS
 app.use(cors({
-    origin: 'https://gerenciador-financeiro-sigma.vercel.app' // Removi a barra final para evitar conflitos
+    origin: '*', // Permite qualquer origem (ideal para resolver o erro agora)
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 const SECRET_KEY = process.env.JWT_SECRET || "minha_chave_secreta_ultra_segura_123";
