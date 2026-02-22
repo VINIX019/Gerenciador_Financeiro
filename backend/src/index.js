@@ -5,14 +5,16 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 
 const app = express();
-app.use(express.json());
-app.use(cors());
 
-const cors = require('cors');
+// --- CONFIGURAÇÕES ---
+app.use(express.json());
+
+// CONFIGURAÇÃO ÚNICA DE CORS
 app.use(cors({
-    origin: 'https://gerenciador-financeiro-sigma.vercel.app/' // Coloque a URL do seu site aqui
+    origin: 'https://gerenciador-financeiro-sigma.vercel.app' // Removi a barra final para evitar conflitos
 }));
-const SECRET_KEY = "minha_chave_secreta_ultra_segura_123";
+
+const SECRET_KEY = process.env.JWT_SECRET || "minha_chave_secreta_ultra_segura_123";
 
 // --- MIDDLEWARE DE AUTENTICAÇÃO ---
 function verificarToken(req, res, next) {
@@ -99,12 +101,11 @@ app.get('/transacoes/:userId', verificarToken, async (req, res) => {
     try {
         const historico = await prisma.transacoes.findMany({
             where: { userId: req.params.userId },
-            orderBy: { createdAt: 'desc' } // Ordena as mais recentes primeiro
+            orderBy: { createdAt: 'desc' }
         });
         res.json(historico);
     } catch (e) {
-        // Se der erro 500 aqui, rode 'npx prisma db push' no terminal
-        res.status(500).json({ error: "Erro ao buscar histórico. Verifique se o banco está sincronizado." });
+        res.status(500).json({ error: "Erro ao buscar histórico." });
     }
 });
 
@@ -175,4 +176,5 @@ app.delete('/investimentos/:id', verificarToken, async (req, res) => {
     }
 });
 
-app.listen(3000, () => console.log("🚀 Servidor rodando na porta 3000"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
