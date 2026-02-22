@@ -90,7 +90,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     const carregarHistorico = useCallback(async () => {
         const token = localStorage.getItem('token');
         try {
-            const response = await axios.get(`http://localhost:3000/transacoes/${user.id}`, {
+            const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/transacoes/${user.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setHistorico(response.data);
@@ -111,61 +111,45 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
     const carregarInvestimentos = useCallback(async () => {
         const token = localStorage.getItem('token');
-        const tokenBrapi = "jrNEWthxAUBTdjY1tsq5W9";
+        const DOLAR_FIXO = 5.20; // O valor que você definiu
 
         try {
-            const response = await axios.get(`http://localhost:3000/investimentos/${user.id}`, {
+            // Quando você hospedar seu backend, troque essa URL
+            const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${user.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
             const investimentosDoBanco = response.data;
             let totalAcumulado = 0;
-            let cotacaoDolar = 5.20;
-
-            let cotacaoDolarAtual = dolar;
 
             const listaAtualizada = await Promise.all(investimentosDoBanco.map(async (inv) => {
                 let valorAtualizado = Number(inv.valor);
-                const nomeUpper = inv.nome.toUpperCase();
 
-                // CORREÇÃO AQUI: Limpa o ticker removendo emojis, colchetes e espaços
-                // regex: /[^\w]/g remove tudo que não for letra ou número
+                // Limpa o nome do ativo para não dar erro na API (remove emojis e espaços)
                 let ticker = inv.nome.split(' - ')[0]
-                    .replace('[USD]', '')
-                    .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '') // Remove Emojis
+                    .replace(/[^a-zA-Z0-9]/g, '')
                     .trim()
                     .toUpperCase();
 
                 try {
-                    if (inv.tipo === 'BTC' || inv.tipo === 'CRIPTO') {
-                        const symbol = ticker === 'BTC' ? 'BTCBRL' : `${ticker}BRL`;
-                        try {
-                            const targetUrl = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
-                            const resBinance = await axios.get(`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`);
-                            const data = JSON.parse(resBinance.data.contents);
-                            if (data.price) {
-                                valorAtualizado = parseFloat(data.price) * (Number(inv.quantidade) || 0);
-                            }
-                        } catch (e) { console.error(`Erro Binance: ${ticker}`); }
-                    }
-                    else if (inv.tipo === 'B3' || inv.tipo === 'STOCKS') {
-                        try {
-                            // Agora o ticker vai apenas como "AAPL", "PBR", etc.
-                            const resBrapi = await axios.get(`https://brapi.dev/api/quote/${ticker}?token=${tokenBrapi}`);
-                            if (resBrapi.data?.results?.[0]) {
-                                const precoUnitario = Number(resBrapi.data.results[0].regularMarketPrice) || 0;
-                                const qtd = Number(inv.quantidade) || 0;
+                    // Busca preço atual na Brapi (Ações/Stocks)
+                    if (inv.tipo === 'B3' || inv.tipo === 'STOCKS' || inv.nome.includes('[USD]')) {
+                        const resBrapi = await axios.get(`https://brapi.dev/api/quote/${ticker}?token=jrNEWthxAUBTdjY1tsq5W9`);
 
-                                if (nomeUpper.includes('[USD]') || inv.tipo === 'STOCKS') {
-                                    valorAtualizado = precoUnitario * cotacaoDolar * qtd;
-                                } else {
-                                    valorAtualizado = precoUnitario * qtd;
-                                }
+                        if (resBrapi.data?.results?.[0]) {
+                            const precoUnitario = Number(resBrapi.data.results[0].regularMarketPrice) || 0;
+                            const qtd = Number(inv.quantidade) || 1;
+
+                            if (inv.tipo === 'STOCKS' || inv.nome.includes('[USD]')) {
+                                // USA O SEU DÓLAR DE 5.20
+                                valorAtualizado = precoUnitario * DOLAR_FIXO * qtd;
+                            } else {
+                                valorAtualizado = precoUnitario * qtd;
                             }
-                        } catch (e) { console.warn(`Brapi não encontrou: ${ticker}`); }
+                        }
                     }
-                } catch (err) {
-                    console.error("Erro no processamento:", ticker);
+                } catch (e) {
+                    console.warn("Erro ao atualizar preço de " + ticker + ", mantendo valor original.");
                 }
 
                 totalAcumulado += valorAtualizado;
@@ -174,9 +158,10 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
             setListaInvestimentos(listaAtualizada);
             setInvestimentosTotal(totalAcumulado);
+            setDolar(5.20); // Atualiza o mostrador da tela
 
         } catch (error) {
-            console.error("Erro na carga de dados:", error);
+            console.error("Erro ao carregar dados do banco:", error);
         }
     }, [user.id]);
 
@@ -203,7 +188,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 const token = localStorage.getItem('token');
                 // Aqui ele apenas salva a nova quantidade, 
                 // a função carregarInvestimentos() vai atualizar o preço automaticamente logo depois
-                await axios.put(`http://localhost:3000/investimentos/${inv.id}`, {
+                await axios.put(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${inv.id}`, {
                     ...inv,
                     quantidade: parseFloat(novaQtd.replace(',', '.'))
                 }, { headers: { Authorization: `Bearer ${token}` } });
@@ -411,11 +396,11 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     const novaQtd = ativoExistente.tipo === 'CDB' ? 1 : Number(ativoExistente.quantidade) + quantidadeInformada;
                     const novoValor = ativoExistente.tipo === 'CDB' ? Number(ativoExistente.valor) + valorTotalAtivo : Number((precoUnitario * novaQtd).toFixed(2));
 
-                    await axios.put(`http://localhost:3000/investimentos/${ativoExistente.id}`, {
+                    await axios.put(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${ativoExistente.id}`, {
                         ...ativoExistente, quantidade: novaQtd, valor: novoValor
                     }, { headers: { Authorization: `Bearer ${token}` } });
                 } else {
-                    await axios.post(`http://localhost:3000/investimentos`, {
+                    await axios.post(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos`, {
                         nome: nomeFinal, valor: valorTotalAtivo,
                         quantidade: formValues.tipo === 'CDB' ? 1 : quantidadeInformada,
                         tipo: formValues.tipo, userId: user.id
@@ -432,7 +417,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     };
     const handleDeleteTransacao = async (id) => {
         try {
-            await axios.delete(`http://localhost:3000/transacoes/${id}`, {
+            await axios.delete(`https://gerenciador-financeiro-4lyf.onrender.com/transacoes/${id}`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             });
             carregarHistorico(); atualizarSaldo();
@@ -443,7 +428,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         const confirm = await Swal.fire({ title: 'Excluir?', showCancelButton: true, confirmButtonColor: '#d33' });
         if (confirm.isConfirmed) {
             try {
-                await axios.delete(`http://localhost:3000/investimentos/${id}`, {
+                await axios.delete(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${id}`, {
                     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
                 });
                 carregarInvestimentos();
@@ -468,7 +453,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             }
 
             // 3. Chamada à API
-            await axios.post(`http://localhost:3000/transacoes`, {
+            await axios.post(`https://gerenciador-financeiro-4lyf.onrender.com/transacoes`, {
                 descricao: descricao,
                 valor: valorNumerico,
                 tipo: tipo, // 'entrada' ou 'saida'

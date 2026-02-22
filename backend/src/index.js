@@ -8,6 +8,10 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+const cors = require('cors');
+app.use(cors({
+    origin: 'https://gerenciador-financeiro-sigma.vercel.app/' // Coloque a URL do seu site aqui
+}));
 const SECRET_KEY = "minha_chave_secreta_ultra_segura_123";
 
 // --- MIDDLEWARE DE AUTENTICAÇÃO ---

@@ -24,7 +24,7 @@ function App() {
     if (!token || !userId) return;
 
     try {
-      const response = await axios.get(`http://localhost:3000/usuarios/${userId}/saldo`, {
+      const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/usuarios/${userId}/saldo`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSaldo(response.data.total);
@@ -42,7 +42,7 @@ function App() {
 
   const handleLogin = async (email, senha) => {
     try {
-      const response = await axios.post('http://localhost:3000/login', { email, senha });
+      const response = await axios.post('https://gerenciador-financeiro-4lyf.onrender.com/login', { email, senha });
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
       setUser(response.data.user);
@@ -55,7 +55,7 @@ function App() {
 
   const handleRegister = async (nome, email, senha) => {
     try {
-      await axios.post('http://localhost:3000/usuarios', { nome, email, senha });
+      await axios.post('https://gerenciador-financeiro-4lyf.onrender.com/usuarios', { nome, email, senha });
       toast.success("Conta criada com sucesso!");
       setView('login');
     } catch (error) {
