@@ -83,19 +83,26 @@ app.get('/usuarios/:userId/saldo', verificarToken, async (req, res) => {
 // --- ROTAS DE TRANSAÇÕES ---
 
 app.post('/transacoes', verificarToken, async (req, res) => {
-    const { descricao, valor, tipo, userId } = req.body;
+    const { descricao, valor, tipo, userId, data } = req.body; 
+    
     try {
+        const novaTransacao = {
+            descricao,
+            valor: parseFloat(valor),
+            tipo,
+            userId,
+            // Forçamos a conversão para objeto Date do JavaScript
+            data: data ? new Date(data) : new Date()
+        };
+
         const nova = await prisma.transacoes.create({
-            data: {
-                descricao,
-                valor: parseFloat(valor),
-                tipo,
-                userId
-            }
+            data: novaTransacao
         });
+        
         res.status(201).json(nova);
     } catch (e) {
-        res.status(500).json({ error: "Erro ao salvar transação" });
+        console.error("Erro ao salvar no banco:", e);
+        res.status(500).json({ error: "Erro interno" });
     }
 });
 

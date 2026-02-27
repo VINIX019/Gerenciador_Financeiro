@@ -458,7 +458,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 valor: valorNumerico,
                 tipo: tipo, // 'entrada' ou 'saida'
                 userId: user.id,
-                createdAt: dataTransacao // Certifique-se que o backend usa 'createdAt' ou 'data'
+                data: dataTransacao // Certifique-se que o backend usa 'createdAt' ou 'data'
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -593,7 +593,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     <CardHeader className="border-b bg-slate-50/50">
                         <div className="flex justify-between items-center">
                             <div>
-                                <CardTitle className="text-md font-bold text-slate-700">Fluxo de Caixa</CardTitle>
+                                <CardTitle className="text-md font-bold text-slate-700">Extrato </CardTitle>
                                 <p className="text-[10px] text-slate-500 uppercase">Movimentações recentes</p>
                             </div>
                             <Button
@@ -613,22 +613,25 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                     <th className="px-4 py-3">Descrição</th>
                                     <th className="px-4 py-3 text-right">Valor</th>
                                     <th className="px-4 py-3 text-center">Ações</th>
+                                    <th className='px-4 py-3 text-center'>Data</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
                                 {historico
-                                    .sort((a, b) => new Date(b.createdAt || b.data) - new Date(a.createdAt || a.data)) // Ordena: Mais recente no topo
+                                    .sort((a, b) => new Date(b.data || b.createdAt) - new Date(a.data || a.createdAt)) // Ordena: Mais recente no topo
                                     .map((t) => (
                                         <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                                             <td className="px-4 py-3">
                                                 <div className="text-slate-600 font-medium">{t.descricao}</div>
                                                 <div className="text-[10px] text-slate-400">
-                                                    {new Date(t.data || t.createdAt).toLocaleDateString('pt-BR')}
+                                                    {/* Mostra 'data' se existir, se não, mostra 'createdAt' */}
+                                                    {new Date(t.data || t.createdAt).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
                                                 </div>
                                             </td>
                                             <td className={`px-4 py-3 text-right font-bold ${t.tipo === 'entrada' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                                 {t.tipo === 'entrada' ? '+' : '-'} R$ {Number(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                             </td>
+
                                             <td className="px-4 py-3 text-center">
                                                 <button
                                                     onClick={() => handleDeleteTransacao(t.id)}

@@ -18,9 +18,10 @@ model Transacoes {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   descricao String
   valor     Float
-  tipo      String // 'entrada' ou 'saida'
+  tipo      String   // 'entrada' ou 'saida'
   userId    String   @db.ObjectId
-  createdAt DateTime @default(now()) // Este campo é essencial para o extrato funcionar
+  data      DateTime @default(now()) // <--- ADICIONE ESTA LINHA
+  createdAt DateTime @default(now()) 
 }
 
 model Investimento {
