@@ -20,7 +20,7 @@ const SECRET_KEY = process.env.JWT_SECRET || "minha_chave_secreta_ultra_segura_1
 function verificarToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) return res.status(403).json({ error: "Acesso negado." });
 
     try {
@@ -53,14 +53,25 @@ app.post('/login', async (req, res) => {
     const { email, senha } = req.body;
     try {
         const usuario = await prisma.usuarios.findUnique({ where: { email } });
-        if (!usuario) return res.status(401).json({ error: "Credenciais inválidas." });
+        if (!usuario) return res.status(401).json({ error: "E-mail não encontrado." });
 
         const senhaValida = await bcrypt.compare(senha, usuario.senha);
-        if (!senhaValida) return res.status(401).json({ error: "Credenciais inválidas." });
+        if (!senhaValida) return res.status(401).json({ error: "Senha incorreta." });
 
+        // O segredo: No Postgres, usuario.id já é um Number. 
+        // Não force toString() aqui para evitar conflitos no futuro.
         const token = jwt.sign({ id: usuario.id }, SECRET_KEY, { expiresIn: '1d' });
-        res.json({ token, user: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
+
+        res.json({
+            token,
+            user: {
+                id: usuario.id, // Isso retornará 1, 2, 3...
+                nome: usuario.nome,
+                email: usuario.email
+            }
+        });
     } catch (error) {
+        console.error("ERRO NO LOGIN:", error); // Verifique isso nos logs do Render!
         res.status(500).json({ error: "Erro interno no servidor." });
     }
 });
