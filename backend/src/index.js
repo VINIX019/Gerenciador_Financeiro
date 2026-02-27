@@ -162,7 +162,7 @@ app.put('/investimentos/:id', verificarToken, async (req, res) => {
         const { id } = req.params;
         const { quantidade, valor } = req.body;
         const atualizado = await prisma.investimento.update({
-            where: { idid: Number(req.params.id) },
+            where: { id: Number(req.params.id) },
             data: {
                 quantidade: parseFloat(quantidade),
                 valor: parseFloat(valor)

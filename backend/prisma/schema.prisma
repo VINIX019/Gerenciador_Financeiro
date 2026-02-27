@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql" // OBRIGATÓRIO para o Supabase
-  url      = env("DATABASE_URL")
 }
 
 model Usuarios {
