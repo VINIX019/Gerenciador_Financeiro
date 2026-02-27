@@ -69,10 +69,9 @@ app.post('/login', async (req, res) => {
 
 app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
     try {
-        const { id } = req.params;
-        // O Prisma espera que o id combine com o formato ObjectId definido no schema
+        const userId = Number(req.params.id); // Define e converte para número
         const transacoes = await prisma.transacoes.findMany({
-            userId: Number(userId), 
+            where: { userId: userId }, // Adiciona o bloco 'where' correto
         });
 
         const total = transacoes.reduce((acc, t) => {
@@ -81,7 +80,6 @@ app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
 
         res.json({ total });
     } catch (e) {
-        console.error("ERRO DETALHADO NO SALDO:", e); // Verifique isso nos logs do Render!
         res.status(500).json({ error: e.message });
     }
 });
@@ -121,7 +119,9 @@ app.get("/transacoes/:userId", verificarToken, async (req, res) => {
 
 app.delete('/transacoes/:id', verificarToken, async (req, res) => {
     try {
-        await prisma.transacoes.delete({ where: { id: req.params.id } });
+        await prisma.transacoes.delete({ 
+            where: { id: Number(req.params.id) } // Adicione o Number() aqui
+        });
         res.json({ message: "Transação removida" });
     } catch (e) {
         res.status(500).json({ error: "Erro ao remover transação" });
@@ -133,7 +133,7 @@ app.delete('/transacoes/:id', verificarToken, async (req, res) => {
 app.get('/investimentos/:userId', verificarToken, async (req, res) => {
     try {
         const investimentos = await prisma.investimento.findMany({
-            where: { userId: req.params.userId },
+            where: { userId: Number(req.params.userId) }, // Adicione o Number()
             orderBy: { createdAt: 'desc' }
         });
         res.json(investimentos);
@@ -162,7 +162,7 @@ app.put('/investimentos/:id', verificarToken, async (req, res) => {
         const { id } = req.params;
         const { quantidade, valor } = req.body;
         const atualizado = await prisma.investimento.update({
-            where: { id },
+            where: { idid: Number(req.params.id) },
             data: {
                 quantidade: parseFloat(quantidade),
                 valor: parseFloat(valor)
@@ -176,7 +176,7 @@ app.put('/investimentos/:id', verificarToken, async (req, res) => {
 
 app.delete('/investimentos/:id', verificarToken, async (req, res) => {
     try {
-        await prisma.investimento.delete({ where: { id: req.params.id } });
+        await prisma.investimento.delete({ where: {id: Number(req.params.id)} });
         res.json({ message: "Investimento removido com sucesso" });
     } catch (e) {
         res.status(500).json({ error: "Erro ao remover investimento" });
