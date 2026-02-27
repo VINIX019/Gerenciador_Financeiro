@@ -69,8 +69,10 @@ app.post('/login', async (req, res) => {
 
 app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
     try {
+        const { id } = req.params;
+        // O Prisma espera que o id combine com o formato ObjectId definido no schema
         const transacoes = await prisma.transacoes.findMany({
-            where: { userId: req.params.id }
+            where: { userId: id } 
         });
 
         const total = transacoes.reduce((acc, t) => {
@@ -79,8 +81,8 @@ app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
 
         res.json({ total });
     } catch (e) {
-        console.error("Erro ao calcular saldo:", e);
-        res.status(500).json({ error: "Erro no servidor" });
+        console.error("ERRO DETALHADO NO SALDO:", e); // Verifique isso nos logs do Render!
+        res.status(500).json({ error: e.message });
     }
 });
 

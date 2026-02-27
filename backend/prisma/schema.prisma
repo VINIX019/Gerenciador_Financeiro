@@ -18,9 +18,9 @@ model Transacoes {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   descricao String
   valor     Float
-  tipo      String   // 'entrada' ou 'saida'
+  tipo      String   
   userId    String   @db.ObjectId
-  data      DateTime @default(now()) // <--- ADICIONE ESTA LINHA
+  data      DateTime @default(now()) // Corrigido aqui
   createdAt DateTime @default(now()) 
 }
 
