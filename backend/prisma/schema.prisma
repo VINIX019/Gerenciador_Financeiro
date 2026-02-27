@@ -3,33 +3,42 @@ generator client {
 }
 
 datasource db {
-  provider = "mongodb"
+  provider = "postgresql" // OBRIGATÓRIO para o Supabase
   url      = env("DATABASE_URL")
 }
 
 model Usuarios {
-  id    String @id @default(auto()) @map("_id") @db.ObjectId
-  nome  String
-  email String @unique
-  senha String
+  id            Int            @id @default(autoincrement()) // ID numérico
+  nome          String
+  email         String         @unique
+  senha         String
+  // Um usuário pode ter muitas transações e investimentos
+  transacoes    Transacoes[]
+  investimentos Investimento[]
 }
 
 model Transacoes {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        Int      @id @default(autoincrement())
   descricao String
   valor     Float
-  tipo      String   
-  userId    String   @db.ObjectId
-  data      DateTime @default(now()) // Corrigido aqui
-  createdAt DateTime @default(now()) 
+  tipo      String // "receita" ou "despesa"
+  data      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  // Relacionamento com Usuário
+  userId  Int
+  usuario Usuarios @relation(fields: [userId], references: [id])
 }
 
 model Investimento {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  id         Int      @id @default(autoincrement())
   nome       String
   valor      Float
   quantidade Float
   tipo       String
-  userId     String   @db.ObjectId
   createdAt  DateTime @default(now())
+
+  // Relacionamento com Usuário
+  userId  Int
+  usuario Usuarios @relation(fields: [userId], references: [id])
 }

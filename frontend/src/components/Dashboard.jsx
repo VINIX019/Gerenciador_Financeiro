@@ -90,7 +90,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     const carregarHistorico = useCallback(async () => {
         const token = localStorage.getItem('token');
         try {
-            const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/transacoes/${user.id}`, {
+            const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/transacoes/${Number(user.id)}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setHistorico(response.data);
@@ -115,7 +115,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
         try {
             // Quando você hospedar seu backend, troque essa URL
-            const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${user.id}`, {
+            const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${Number(user.id)}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -403,7 +403,8 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     await axios.post(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos`, {
                         nome: nomeFinal, valor: valorTotalAtivo,
                         quantidade: formValues.tipo === 'CDB' ? 1 : quantidadeInformada,
-                        tipo: formValues.tipo, userId: user.id
+                        tipo: formValues.tipo, 
+                        userId: Number(user.id)
                     }, { headers: { Authorization: `Bearer ${token}` } });
                 }
 
@@ -457,7 +458,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 descricao: descricao,
                 valor: valorNumerico,
                 tipo: tipo, // 'entrada' ou 'saida'
-                userId: user.id,
+                userId: Number(user.id),
                 data: dataTransacao // Certifique-se que o backend usa 'createdAt' ou 'data'
             }, {
                 headers: { Authorization: `Bearer ${token}` }

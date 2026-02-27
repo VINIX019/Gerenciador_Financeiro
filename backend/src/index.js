@@ -72,7 +72,7 @@ app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
         const { id } = req.params;
         // O Prisma espera que o id combine com o formato ObjectId definido no schema
         const transacoes = await prisma.transacoes.findMany({
-            where: { userId: id } 
+            userId: Number(userId), 
         });
 
         const total = transacoes.reduce((acc, t) => {
@@ -88,36 +88,34 @@ app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
 
 // --- ROTAS DE TRANSAÇÕES ---
 
-app.post('/transacoes', verificarToken, async (req, res) => {
-    const { descricao, valor, tipo, userId, data } = req.body; 
+app.post("/transacoes", verificarToken, async (req, res) => {
+    const { descricao, valor, tipo, userId } = req.body;
+
     try {
-        const nova = await prisma.transacoes.create({
+        const novaTransacao = await prisma.transacoes.create({
             data: {
                 descricao,
                 valor: parseFloat(valor),
                 tipo,
-                userId,
-                // Se o frontend enviar 'data', converte para objeto Date. 
-                // Se não, usa o momento atual.
-                data: data ? new Date(data) : new Date() 
-            }
+                userId: Number(userId), // <--- MUDANÇA AQUI
+            },
         });
-        res.status(201).json(nova);
-    } catch (e) {
-        console.error("Erro Prisma:", e); // Veja o erro detalhado nos Logs do Render
-        res.status(500).json({ error: "Erro ao salvar no banco" });
+        res.status(201).json(novaTransacao);
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao criar transação" });
     }
 });
 
-app.get('/transacoes/:userId', verificarToken, async (req, res) => {
+app.get("/transacoes/:userId", verificarToken, async (req, res) => {
+    const userId = Number(req.params.userId); // <--- MUDANÇA AQUI
+
     try {
-        const historico = await prisma.transacoes.findMany({
-            where: { userId: req.params.userId },
-            orderBy: { createdAt: 'desc' }
+        const transacoes = await prisma.transacoes.findMany({
+            where: { userId: userId }, // Agora o userId é um número
         });
-        res.json(historico);
-    } catch (e) {
-        res.status(500).json({ error: "Erro ao buscar histórico." });
+        res.json(transacoes);
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao buscar transações" });
     }
 });
 
@@ -144,22 +142,19 @@ app.get('/investimentos/:userId', verificarToken, async (req, res) => {
     }
 });
 
-app.post('/investimentos', verificarToken, async (req, res) => {
-    try {
-        const { nome, valor, quantidade, tipo, userId } = req.body;
-        const novo = await prisma.investimento.create({
-            data: {
-                nome,
-                valor: parseFloat(valor),
-                quantidade: parseFloat(quantidade),
-                tipo,
-                userId
-            }
-        });
-        res.status(201).json(novo);
-    } catch (e) {
-        res.status(500).json({ error: "Erro ao salvar investimento" });
-    }
+app.post("/investimentos", verificarToken, async (req, res) => {
+    const { nome, valor, quantidade, tipo, userId } = req.body;
+
+    const novoInvestimento = await prisma.investimento.create({
+        data: {
+            nome,
+            valor: parseFloat(valor),
+            quantidade: parseFloat(quantidade),
+            tipo,
+            userId: Number(userId), // <--- MUDANÇA AQUI
+        },
+    });
+    res.json(novoInvestimento);
 });
 
 app.put('/investimentos/:id', verificarToken, async (req, res) => {
