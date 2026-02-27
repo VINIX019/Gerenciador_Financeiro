@@ -500,7 +500,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                         <DollarSign size={18} />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-black">R$ {saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-3xl font-black">R$ {(saldo || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
                     </CardContent>
                 </Card>
 

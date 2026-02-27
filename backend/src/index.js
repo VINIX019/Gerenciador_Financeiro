@@ -67,43 +67,43 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.get('/usuarios/:userId/saldo', verificarToken, async (req, res) => {
-    const { userId } = req.params;
+app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
     try {
-        const transacoes = await prisma.transacoes.findMany({ where: { userId } });
+        const transacoes = await prisma.transacoes.findMany({
+            where: { userId: req.params.id }
+        });
+
         const total = transacoes.reduce((acc, t) => {
             return t.tipo === 'entrada' ? acc + t.valor : acc - t.valor;
         }, 0);
+
         res.json({ total });
     } catch (e) {
-        res.status(500).json({ error: "Erro ao buscar saldo" });
+        console.error("Erro ao calcular saldo:", e);
+        res.status(500).json({ error: "Erro no servidor" });
     }
 });
 
 // --- ROTAS DE TRANSAÇÕES ---
 
 app.post('/transacoes', verificarToken, async (req, res) => {
-    console.log("DADOS RECEBIDOS:", req.body);
     const { descricao, valor, tipo, userId, data } = req.body; 
-    
     try {
-        const novaTransacao = {
-            descricao,
-            valor: parseFloat(valor),
-            tipo,
-            userId,
-            // Forçamos a conversão para objeto Date do JavaScript
-            data: data ? new Date(data) : new Date()
-        };
-
         const nova = await prisma.transacoes.create({
-            data: novaTransacao
+            data: {
+                descricao,
+                valor: parseFloat(valor),
+                tipo,
+                userId,
+                // Se o frontend enviar 'data', converte para objeto Date. 
+                // Se não, usa o momento atual.
+                data: data ? new Date(data) : new Date() 
+            }
         });
-        
         res.status(201).json(nova);
     } catch (e) {
-        console.error("Erro ao salvar no banco:", e);
-        res.status(500).json({ error: "Erro interno" });
+        console.error("Erro Prisma:", e); // Veja o erro detalhado nos Logs do Render
+        res.status(500).json({ error: "Erro ao salvar no banco" });
     }
 });
 
