@@ -83,6 +83,7 @@ app.get('/usuarios/:userId/saldo', verificarToken, async (req, res) => {
 // --- ROTAS DE TRANSAÇÕES ---
 
 app.post('/transacoes', verificarToken, async (req, res) => {
+    console.log("DADOS RECEBIDOS:", req.body);
     const { descricao, valor, tipo, userId, data } = req.body; 
     
     try {
