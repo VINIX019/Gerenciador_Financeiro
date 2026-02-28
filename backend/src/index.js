@@ -44,7 +44,11 @@ app.post('/usuarios', async (req, res) => {
         });
         res.status(201).json(novoUsuario);
     } catch (error) {
-        res.status(400).json({ error: "E-mail já cadastrado ou dados inválidos." });
+        console.error("ERRO REAL NO CADASTRO:", error); // <--- ADICIONE ESTA LINHA
+        res.status(400).json({ 
+            error: "Erro no cadastro", 
+            details: error.message // <--- ADICIONE ESTA LINHA PARA VER NO NAVEGADOR
+        });
     }
 });
 
