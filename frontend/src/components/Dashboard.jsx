@@ -31,6 +31,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     const [modalExtratoAberto, setModalExtratoAberto] = useState(false);
     const [mesSelecionado, setMesSelecionado] = useState(new Date().getMonth().toString());
     const [dolar, setDolar] = useState(5.20);
+    const [anoSelecionado, setAnoSelecionado] = useState(new Date().getFullYear());
 
     const fetchDolar = useCallback(async () => {
         try {
@@ -66,22 +67,63 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         }
     };
 
-    const transacoesFiltradas = historico.filter(item => {
-        const dataRaw = item.createdAt || item.data;
-        if (!dataRaw) return false;
-        const dataT = new Date(dataRaw);
-        const mesAlvo = parseInt(mesSelecionado);
-        return dataT.getMonth() === mesAlvo && dataT.getFullYear() === new Date().getFullYear();
-    });
+    const transacoesFiltradas = React.useMemo(() => {
+        return (historico || []).filter(item => {
+            // Pega a data do banco (createdAt ou data)
+            const dataRaw = item.data || item.createdAt;
+            if (!dataRaw) return false;
 
-    // 2. Calculamos os totais usando a mesma variável 'item' (Aqui estava o erro 't is not defined')
-    const totalEntradasMes = transacoesFiltradas
-        .filter(item => item.tipo === 'entrada')
-        .reduce((acc, item) => acc + Number(item.valor), 0);
+            // Extraímos apenas a parte "AAAA-MM-DD" ignorando o resto (T00:00:00...)
+            const apenasData = dataRaw.split('T')[0];
+            const partes = apenasData.split('-'); // [0]=Ano, [1]=Mês, [2]=Dia
 
-    const totalSaidasMes = transacoesFiltradas
-        .filter(item => item.tipo === 'saida')
-        .reduce((acc, item) => acc + Number(item.valor), 0);
+            const anoTransacao = parseInt(partes[0]);
+            // No banco o mês vem 01, 02... No Select Janeiro é 0, então subtraímos 1
+            const mesTransacao = parseInt(partes[1]) - 1;
+
+            const mesAlvo = parseInt(mesSelecionado);
+            const anoAlvo = parseInt(anoSelecionado);
+
+            // Comparação puramente numérica de texto extraído
+            return mesTransacao === mesAlvo && anoTransacao === anoAlvo;
+        });
+    }, [historico, mesSelecionado, anoSelecionado]);
+
+    const resumoFinanceiro = React.useMemo(() => {
+        let entradas = 0;
+        let saidas = 0;
+
+        transacoesFiltradas.forEach((item) => {
+            const valor = Number(item.valor || 0);
+
+            if (valor > 0) entradas += valor;
+            if (valor < 0) saidas += Math.abs(valor);
+        });
+
+        return {
+            entradas,
+            saidas,
+            saldo: entradas - saidas
+        };
+    }, [transacoesFiltradas]);
+    // 2. Calcula os totais baseados no que foi filtrado acima
+    const totalEntradasMes = React.useMemo(() =>
+        transacoesFiltradas
+            .filter(t => t.tipo === 'entrada')
+            .reduce((acc, t) => acc + Number(t.valor || 0), 0)
+        , [transacoesFiltradas]);
+
+    const totalSaidasMes = React.useMemo(() =>
+        transacoesFiltradas
+            .filter(t => t.tipo === 'saida' || t.tipo === 'despesa')
+            .reduce((acc, t) => acc + Number(t.valor || 0), 0)
+        , [transacoesFiltradas]);
+
+    // 3. Monta os dados do Gráfico de Pizza (Pie)
+    const dadosTransacoes = React.useMemo(() => [
+        { name: 'Receitas', value: totalEntradasMes, tipo: 'entrada' },
+        { name: 'Despesas', value: totalSaidasMes, tipo: 'saida' }
+    ], [totalEntradasMes, totalSaidasMes]);
 
     const mesesNomes = [
         "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -97,17 +139,40 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         } catch (error) { console.error("Erro ao buscar histórico:", error); }
     }, [user.id]);
 
-    const CORES_TIPOS = {
-        'B3': '#06b6d4',
-        'BTC': '#f59e0b',
-        'CDB': '#10b981'
+    const CORES = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308'];
+    const CORES_TIPOS_INV = {
+        'B3': '#06b6d4',     // Ciano
+        'BTC': '#f59e0b',    // Laranja
+        'CDB': '#10b981',    // Verde
+        'STOCKS': '#8b5cf6', // Roxo (ou a cor que preferir)
     };
 
-    const dadosGrafico = listaInvestimentos.map(inv => ({
-        name: inv.nome.split(' - ')[0],
-        value: Number(inv.valor),
-        color: CORES_TIPOS[inv.tipo] || '#94a3b8'
-    }));
+    // Gráfico 1: Investimentos
+    // Gráfico 1: Investimentos (Com o campo 'tipo' para a cor)
+    const dadosInvestimentos = React.useMemo(() => {
+        const lista = Array.isArray(listaInvestimentos) ? listaInvestimentos : [];
+
+        const agrupado = lista.reduce((acc, inv) => {
+            const tipo = (inv.tipo || 'OUTROS').toUpperCase();
+
+            // IMPORTANTE: Aqui pegamos o valor que já está na tabela.
+            // Como 'carregarInvestimentos' já faz Valor * Qtd, aqui apenas lemos o resultado.
+            const valorTotalJaCalculado = typeof inv.valor === 'string'
+                ? parseFloat(inv.valor.replace(',', '.'))
+                : Number(inv.valor);
+
+            if (!acc[tipo]) acc[tipo] = 0;
+            acc[tipo] += (valorTotalJaCalculado || 0);
+            return acc;
+        }, {});
+
+        return Object.keys(agrupado).map(tipo => ({
+            name: tipo,
+            value: agrupado[tipo],
+            tipo: tipo
+        }));
+    }, [listaInvestimentos]);
+    // Gráfico 2: Transações (Fixando Verde e Vermelho)
 
     const carregarInvestimentos = useCallback(async () => {
         const token = localStorage.getItem('token');
@@ -174,29 +239,74 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         inicializar();
     }, [fetchDolar, carregarHistorico, carregarInvestimentos]);
 
+    const dividendosEstimados = React.useMemo(() => {
+        const lista = Array.isArray(listaInvestimentos) ? listaInvestimentos : [];
+
+        // Simulação de Dividend Yield médio mensal (Pode ser ajustado ou vir de uma API futura)
+        // FIIs (B3): ~0.8% ao mês | STOCKS: ~0.3% ao mês
+        return lista.reduce((acc, inv) => {
+            const valorAtivo = Number(inv.valor) || 0;
+            let estimativaAtivo = 0;
+
+            if (inv.tipo === 'B3') {
+                estimativaAtivo = valorAtivo * 0.008; // Estimativa de 0.8%
+            } else if (inv.tipo === 'STOCKS') {
+                estimativaAtivo = valorAtivo * 0.003; // Estimativa de 0.3%
+            }
+
+            return acc + estimativaAtivo;
+        }, 0);
+    }, [listaInvestimentos]);
+
     const handleEditarInvestimento = async (inv) => {
-        const { value: novaQtd } = await Swal.fire({
+        const isCDB = inv.tipo === 'CDB';
+
+        // Preparar o valor inicial que aparecerá no campo de texto
+        const valorInicial = isCDB
+            ? Number(inv.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+            : inv.quantidade;
+
+        const { value: novoValorOuQtd } = await Swal.fire({
             title: `Editar ${inv.nome}`,
             input: 'text',
-            inputLabel: 'Nova Quantidade',
-            inputValue: inv.quantidade,
-            showCancelButton: true
+            inputLabel: isCDB ? 'Novo Valor Total (R$)' : 'Nova Quantidade',
+            inputValue: valorInicial, // <--- Aqui ele mostrará os 6.500,00 em vez de 1
+            showCancelButton: true,
+            confirmButtonText: 'Salvar Alteração',
+            cancelButtonText: 'Cancelar',
+            inputValidator: (value) => {
+                if (!value) return 'Você precisa digitar um valor!';
+            }
         });
 
-        if (novaQtd) {
+        if (novoValorOuQtd) {
             try {
                 const token = localStorage.getItem('token');
-                // Aqui ele apenas salva a nova quantidade, 
-                // a função carregarInvestimentos() vai atualizar o preço automaticamente logo depois
-                await axios.put(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${inv.id}`, {
-                    ...inv,
-                    quantidade: parseFloat(novaQtd.replace(',', '.'))
-                }, { headers: { Authorization: `Bearer ${token}` } });
+                // Limpa pontos de milhar e troca vírgula por ponto para o banco
+                const valorTratado = parseFloat(novoValorOuQtd.replace(/\./g, '').replace(',', '.'));
 
-                carregarInvestimentos();
-                toast.success("Atualizado com sucesso!");
+                const dadosAtualizados = { ...inv };
+
+                if (isCDB) {
+                    // No CDB, atualizamos o valor e mantemos a quantidade como 1
+                    dadosAtualizados.valor = valorTratado;
+                    dadosAtualizados.quantidade = 1;
+                } else {
+                    // Em Ações/Cripto, atualizamos a quantidade e deixamos o sistema recalcular o valor
+                    dadosAtualizados.quantidade = valorTratado;
+                }
+
+                await axios.put(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${inv.id}`,
+                    dadosAtualizados,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+
+                toast.success("Investimento atualizado!");
+                carregarInvestimentos(); // Atualiza a tela
+
             } catch (error) {
-                toast.error("Erro ao editar");
+                console.error("Erro ao editar:", error);
+                toast.error("Erro ao salvar alterações.");
             }
         }
     };
@@ -235,12 +345,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         });
 
         if (!busca) return; // Usuário cancelou
-
-        // 2. Filtra as transações com base na escolha
-        const transacoesFiltradas = historico.filter(t => {
-            const dataT = new Date(t.createdAt || t.data);
-            return dataT.getMonth() === busca.mes && dataT.getFullYear() === busca.ano;
-        });
 
         const totalEntradas = transacoesFiltradas
             .filter(t => t.tipo === 'entrada')
@@ -364,7 +468,8 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 // --- LÓGICA DE STOCKS ---
                 else if (formValues.tipo === 'STOCKS') {
                     const res = await axios.get(`https://brapi.dev/api/quote/${formValues.ticker}?token=${tokenBrapi}`);
-                    precoUnitario = res.data.results[0].regularMarketPrice * cotacaoDolarAtual;
+                    // Use o 'dolar' do seu state em vez de buscar da Brapi de novo
+                    precoUnitario = res.data.results[0].regularMarketPrice * (dolar || 5.50);
                     nomeFinal = `🇺🇸 ${formValues.ticker} - ${res.data.results[0].longName}`;
                     valorTotalAtivo = Number((precoUnitario * quantidadeInformada).toFixed(2));
                 }
@@ -438,46 +543,35 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     };
 
     const handleNovaTransacao = async (tipo) => {
-        // 1. Validação: Verifica se os campos estão preenchidos
         if (!valor || !descricao || !dataTransacao) {
-            return toast.warn("Preencha todos os campos (Descrição, Valor e Data)!");
+            return toast.warn("Preencha todos os campos!");
         }
 
         try {
             const token = localStorage.getItem('token');
-
-            // 2. Tratamento do valor: Converte "10,50" para 10.50 (formato numérico)
             const valorNumerico = parseFloat(valor.replace(',', '.'));
 
-            if (isNaN(valorNumerico) || valorNumerico <= 0) {
-                return toast.error("Por favor, insira um valor válido!");
-            }
-
-            // 3. Chamada à API
+            // ENVIAMOS A STRING PURA (Ex: "2026-01-15")
+            // Não use "new Date(dataTransacao)" aqui, pois o fuso horário vai estragar a data.
             await axios.post(`https://gerenciador-financeiro-1-6cpc.onrender.com/transacoes`, {
                 descricao: descricao,
                 valor: valorNumerico,
-                tipo: tipo, // 'entrada' ou 'saida'
+                tipo: tipo,
                 userId: Number(user.id),
-                data: new Date(dataTransacao + "T12:00:00") // Certifique-se que o backend usa 'createdAt' ou 'data'
+                data: dataTransacao // String direta do input type="date"
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            // 4. Sucesso: Limpa os campos e atualiza a interface
-            toast.success(`${tipo === 'entrada' ? 'Receita' : 'Despesa'} registada com sucesso!`);
-
+            toast.success(`${tipo === 'entrada' ? 'Receita' : 'Despesa'} registada!`);
             setValor('');
             setDescricao('');
-            // Opcional: manter a data atual ou resetar para hoje
-            // setDataTransacao(new Date().toISOString().split('T')[0]);
 
-            // 5. Atualiza o histórico e o saldo no Dashboard
             carregarHistorico();
             if (atualizarSaldo) atualizarSaldo();
 
         } catch (error) {
-            console.error("Erro ao salvar transação:", error);
+            console.error("Erro ao salvar:", error);
             toast.error("Erro ao comunicar com o servidor.");
         }
     };
@@ -495,6 +589,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             </div>
 
             <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3 mb-8">
+                {/* CARD DE SALDO BANCÁRIO */}
                 <Card style={{ backgroundColor: saldo >= 0 ? '#059669' : '#e11d48' }} className="text-white border-none shadow-lg">
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-xs uppercase opacity-80">Saldo Bancário</CardTitle>
@@ -505,6 +600,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </CardContent>
                 </Card>
 
+                {/* CARD DE MOVIMENTAÇÃO */}
                 <Card className="shadow-sm border-slate-200">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-xs uppercase text-slate-500">Nova Movimentação</CardTitle>
@@ -522,14 +618,12 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             onChange={(e) => setValor(e.target.value)}
                             className="h-8 text-sm"
                         />
-                        {/* NOVO CAMPO DE DATA */}
                         <Input
                             type="date"
                             value={dataTransacao}
                             onChange={(e) => setDataTransacao(e.target.value)}
                             className="h-8 text-sm text-slate-500"
                         />
-
                         <div className="flex gap-2">
                             <Button onClick={() => handleNovaTransacao('entrada')} className="flex-1 bg-emerald-600 h-8">
                                 <ArrowUpCircle size={16} />
@@ -541,51 +635,158 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </CardContent>
                 </Card>
 
-                <Card style={{ backgroundColor: '#0f172a', color: 'white' }} className="border-none shadow-xl relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-3 opacity-10 text-cyan-400"><TrendingUp size={60} /></div>
+                {/* CARD DE INVESTIMENTOS COM DIVIDENDOS INTEGRADOS */}
+                <Card style={{ backgroundColor: '#0f172a', color: 'white' }} className="border-none shadow-xl relative overflow-hidden flex flex-col justify-between">
+                    <div className="absolute top-0 right-0 p-3 opacity-10 text-cyan-400">
+                        <TrendingUp size={60} />
+                    </div>
+
                     <CardHeader className="pb-2 relative z-10">
-                        <CardTitle className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Investimentos</CardTitle>
+                        <CardTitle className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Patrimônio em Ativos</CardTitle>
                     </CardHeader>
-                    <CardContent className="relative z-10">
-                        <div className="text-3xl font-black">R$ {investimentosTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                        <Button onClick={handleNovoInvestimento} className="w-full mt-4 h-9 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold border-none">
+
+                    <CardContent className="relative z-10 space-y-4">
+                        {/* Valor Total Investido */}
+                        <div>
+                            <div className="text-3xl font-black text-white">
+                                R$ {investimentosTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </div>
+                        </div>
+
+                        {/* Linha Divisória Sutil */}
+                        <div className="border-t border-slate-700/50 pt-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 tracking-tighter">Projeção Mensal de Dividendos</p>
+                                    <div className="text-lg font-bold text-emerald-400">
+                                        R$ {dividendosEstimados.toLocaleString('pt-BR', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}
+                                    </div>
+                                </div>
+                                <TrendingUp size={20} className="text-emerald-500/50" />
+                            </div>
+                        </div>
+
+                        <Button onClick={handleNovoInvestimento} className="w-full h-9 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold border-none transition-all">
                             <Plus size={14} className="mr-2" /> SINCRONIZAR NOVO ATIVO
                         </Button>
                     </CardContent>
                 </Card>
             </div>
-            <div className="max-w-6xl mx-auto mb-8">
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-6xl mx-auto mb-8">
+
+                {/* CARD DE TRANSAÇÕES (RECEITAS VS DESPESAS) */}
                 <Card className="shadow-md border-slate-200 bg-white">
-                    <CardHeader className="pb-0">
-                        <CardTitle className="text-sm font-bold text-slate-500 uppercase tracking-wider">
-                            Distribuição por Ativo
+                    <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-slate-50">
+                        <CardTitle className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                            Resumo de {mesesNomes[parseInt(mesSelecionado)]} / {anoSelecionado}
                         </CardTitle>
+
+                        {/* Filtros de Mês e Ano */}
+                        <div className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
+                            <Calendar size={12} className="text-slate-400" />
+
+                            {/* Seletor de Mês */}
+                            <select
+                                value={mesSelecionado}
+                                onChange={(e) => setMesSelecionado(e.target.value)}
+                                className="bg-transparent text-[10px] font-bold text-slate-600 outline-none cursor-pointer"
+                            >
+                                {mesesNomes.map((month, index) => (
+                                    <option key={index} value={index.toString()}>{month}</option>
+                                ))}
+                            </select>
+
+                            <span className="text-slate-300">|</span>
+
+                            {/* Seletor de Ano */}
+                            <select
+                                value={anoSelecionado}
+                                onChange={(e) => setAnoSelecionado(Number(e.target.value))}
+                                className="bg-transparent text-[10px] font-bold text-slate-600 outline-none cursor-pointer"
+                            >
+                                {[2024, 2025, 2026].map((ano) => (
+                                    <option key={ano} value={ano}>{ano}</option>
+                                ))}
+                            </select>
+                        </div>
                     </CardHeader>
-                    <CardContent className="h-[320px] pt-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={dadosGrafico}
-                                    innerRadius={70}
-                                    outerRadius={100}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    nameKey="name"
-                                >
-                                    {dadosGrafico.map((entry, index) => (
-                                        <Cell
-                                            key={`cell-${index}`}
-                                            fill={entry.color || CORES[index % CORES.length]}
+
+                    <CardContent className="h-[350px] w-full pt-6">
+                        {transacoesFiltradas.length > 0 ? (
+                            <div style={{ width: '100%', height: '300px' }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={dadosTransacoes}
+                                            innerRadius={70}
+                                            outerRadius={90}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            paddingAngle={5}
+                                        >
+                                            {dadosTransacoes.map((entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={entry.tipo === 'entrada' ? '#10b981' : '#f43f5e'}
+                                                />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip
+                                            formatter={(v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                                         />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                                />
-                                <Legend verticalAlign="bottom" height={36} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                                        <Legend verticalAlign="bottom" height={36} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col h-full items-center justify-center text-slate-400 gap-2">
+                                <Calendar size={24} className="opacity-20" />
+                                <p className="text-xs italic">Nenhum dado encontrado para este período.</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+                {/* CARD DE INVESTIMENTOS (POR ATIVO) */}
+                <Card className="shadow-md border-slate-200 bg-white">
+                    <CardHeader>
+                        <CardTitle className="text-sm font-bold text-slate-500 uppercase">Distribuição por Ativo</CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[300px]">
+                        {dadosInvestimentos && dadosInvestimentos.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={dadosInvestimentos}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                    >
+                                        {dadosInvestimentos.map((entry, index) => (
+                                            <Cell
+                                                key={`cell-inv-${index}`}
+                                                // Usa a cor do tipo, se não existir na lista, usa uma cor padrão
+                                                fill={CORES_TIPOS_INV[entry.tipo] || '#94a3b8'}
+                                            />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip
+                                        formatter={(v) => `R$ ${Number(v).toLocaleString('pt-BR', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                        })}`}
+                                    />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-slate-400 italic">Nenhum investimento cadastrado</div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
@@ -613,7 +814,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                 <tr>
                                     <th className="px-4 py-3">Descrição</th>
                                     <th className="px-4 py-3 text-right">Valor</th>
-                                    <th className='px-4 py-3 text-center'>Data</th>
                                     <th className="px-4 py-3 text-center">Ações</th>
                                 </tr>
                             </thead>
@@ -625,8 +825,12 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                             <td className="px-4 py-3">
                                                 <div className="text-slate-600 font-medium">{t.descricao}</div>
                                                 <div className="text-[10px] text-slate-400">
-                                                    {/* Mostra 'data' se existir, se não, mostra 'createdAt' */}
-                                                    new Date(t.data || t.createdAt).toLocaleDateString('pt-BR')
+                                                    {(() => {
+                                                        const d = new Date(t.data || t.createdAt);
+                                                        // Adiciona a diferença de fuso para que a data não retroceda
+                                                        d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+                                                        return d.toLocaleDateString('pt-BR');
+                                                    })()}
                                                 </div>
                                             </td>
                                             <td className={`px-4 py-3 text-right font-bold ${t.tipo === 'entrada' ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -722,83 +926,110 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 </Card>
             </div>
             <Dialog open={modalExtratoAberto} onOpenChange={setModalExtratoAberto}>
-                <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-white">
-                    <DialogHeader className="flex flex-row items-center justify-between border-b pb-4">
-                        <div>
-                            <DialogTitle className="text-2xl font-bold text-slate-800">Extrato Mensal</DialogTitle>
-                            <p className="text-sm text-slate-500">Relatório de movimentações bancárias</p>
-                        </div>
+                <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden bg-white p-0 border border-slate-200 shadow-2xl">
+                    {/* Cabeçalho Claro e Minimalista */}
+                    <DialogHeader className="p-6 bg-white border-b border-slate-100">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <DialogTitle className="text-2xl font-bold text-slate-800 tracking-tight">
+                                    Extrato Detalhado
+                                </DialogTitle>
+                                <p className="text-slate-500 text-sm">
+                                    Movimentações de {mesesNomes[parseInt(mesSelecionado)]}
+                                </p>
+                            </div>
 
-                        <div className="w-[180px] mr-8">
-                            <select
-                                value={mesSelecionado}
-                                onChange={(e) => setMesSelecionado(e.target.value)}
-                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                            >
-                                {mesesNomes.map((month, index) => (
-                                    <option key={index} value={index.toString()}>{month}</option>
-                                ))}
-                            </select>
+                            <div className="relative">
+                                <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                <select
+                                    value={mesSelecionado}
+                                    onChange={(e) => setMesSelecionado(e.target.value)}
+                                    className="pl-10 pr-4 h-10 w-[180px] rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none cursor-pointer hover:border-slate-300"
+                                >
+                                    {mesesNomes.map((month, index) => (
+                                        <option key={index} value={index.toString()}>{month}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     </DialogHeader>
 
-                    {/* Cards de Resumo */}
-                    <div className="grid grid-cols-2 gap-4 my-6 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                        <div>
-                            <p className="text-xs text-emerald-600 uppercase font-bold tracking-wider">Total Entradas</p>
-                            <p className="text-2xl font-black text-emerald-700">
-                                R$ {totalEntradasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-rose-600 uppercase font-bold tracking-wider">Total Saídas</p>
-                            <p className="text-2xl font-black text-rose-700">
-                                R$ {totalSaidasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </p>
-                        </div>
-                    </div>
+                    <div className="p-6 overflow-y-auto max-h-[calc(85vh-120px)] bg-white">
+                        {/* Cards de Resumo com Cores Suaves */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                            <div className="p-5 bg-emerald-50/50 border border-emerald-100 rounded-2xl transition-all hover:shadow-sm">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="p-1 bg-emerald-100 rounded-full">
+                                        <ArrowUpCircle className="h-3.5 w-3.5 text-emerald-600" />
+                                    </div>
+                                    <span className="text-[10px] text-emerald-600 uppercase font-bold tracking-widest">Entradas</span>
+                                </div>
+                                <p className="text-2xl font-black text-emerald-700">
+                                    R$ {totalEntradasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </p>
+                            </div>
 
-                    <h3 className="font-bold mb-3 text-slate-700">
-                        Movimentações de {mesesNomes[parseInt(mesSelecionado)]}
-                    </h3>
+                            <div className="p-5 bg-rose-50/50 border border-rose-100 rounded-2xl transition-all hover:shadow-sm">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="p-1 bg-rose-100 rounded-full">
+                                        <ArrowDownCircle className="h-3.5 w-3.5 text-rose-600" />
+                                    </div>
+                                    <span className="text-[10px] text-rose-600 uppercase font-bold tracking-widest">Saídas</span>
+                                </div>
+                                <p className="text-2xl font-black text-rose-700">
+                                    R$ {totalSaidasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </p>
+                            </div>
+                        </div>
 
-                    <div className="rounded-md border border-slate-100">
-                        <table className="w-full text-sm">
-                            <thead className="bg-slate-50 border-b">
-                                <tr>
-                                    <th className="px-4 py-3 text-left font-bold text-slate-500">Descrição / Data</th>
-                                    <th className="px-4 py-3 text-right font-bold text-slate-500">Valor</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {transacoesFiltradas.length > 0 ? (
-                                    transacoesFiltradas.map((t) => (
-                                        <tr key={t.id} className="hover:bg-slate-50/50">
-                                            <td className="px-4 py-3">
-                                                <div className="font-semibold text-slate-700">{t.descricao}</div>
-                                                <div className="text-[10px] text-slate-400">
-                                                    {(() => {
-                                                        const d = new Date(t.createdAt || t.data);
-                                                        return isNaN(d.getTime())
-                                                            ? "Data não disponível"
-                                                            : d.toLocaleDateString('pt-BR');
-                                                    })()}
+                        {/* Tabela Clean */}
+                        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50/50 border-b border-slate-100">
+                                    <tr>
+                                        <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">Descrição e Data</th>
+                                        <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {transacoesFiltradas.length > 0 ? (
+                                        transacoesFiltradas.map((t) => (
+                                            <tr key={t.id} className="group hover:bg-slate-50/30 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="font-semibold text-slate-700 group-hover:text-blue-600 transition-colors">
+                                                        {t.descricao}
+                                                    </div>
+                                                    <div className="text-[10px] flex items-center gap-1 text-slate-400 mt-1">
+                                                        {(() => {
+                                                            const d = new Date(t.createdAt || t.data);
+                                                            // Ajuste para evitar que a data mude devido ao fuso horário
+                                                            if (!(t.createdAt || t.data).includes('T')) {
+                                                                d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+                                                            }
+                                                            return isNaN(d.getTime()) ? "Data não disponível" : d.toLocaleDateString('pt-BR');
+                                                        })()}
+                                                    </div>
+                                                </td>
+                                                <td className={`px-6 py-4 text-right font-mono font-bold text-base ${t.tipo === 'entrada' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                                    {t.tipo === 'entrada' ? '+' : '-'} R$ {Number(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={2} className="py-20 text-center">
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="p-4 bg-slate-50 rounded-full text-slate-300">
+                                                        <Calendar size={32} />
+                                                    </div>
+                                                    <p className="text-slate-400 text-sm font-medium">Nenhum registro encontrado.</p>
                                                 </div>
                                             </td>
-                                            <td className={`px-4 py-3 text-right font-mono font-bold ${t.tipo === 'entrada' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                {t.tipo === 'entrada' ? '+' : '-'} R$ {Number(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                            </td>
                                         </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={2} className="text-center py-10 text-slate-400 italic">
-                                            Nenhuma movimentação encontrada para este mês.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>
