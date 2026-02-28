@@ -209,7 +209,18 @@ app.delete('/investimentos/:id', verificarToken, async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`)
-})
+
+async function startServer() {
+  try {
+    await prisma.$connect()
+    console.log('✅ Conectado ao banco')
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor rodando na porta ${PORT}`)
+    })
+
+  } catch (error) {
+    console.error('❌ Erro ao conectar no banco:', error)
+    process.exit(1)
+  }
+}
