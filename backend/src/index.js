@@ -47,9 +47,9 @@ app.post('/usuarios', async (req, res) => {
     } catch (error) {
         // ESSA LINHA É A MAIS IMPORTANTE:
         console.error("ERRO DETALHADO DO PRISMA:", error);
-        
-        res.status(400).json({ 
-            error: "Erro no cadastro", 
+
+        res.status(400).json({
+            error: "Erro no cadastro",
             message: error.message, // Isso vai aparecer no seu Console do Navegador (F12)
             code: error.code        // Ex: P2021, P2002...
         });
@@ -122,6 +122,7 @@ app.post('/transacoes', verificarToken, async (req, res) => {
                 descricao,
                 valor: parseFloat(valor),
                 tipo,
+                data: new Date(data),
                 userId: Number(userId)
             }
         });
@@ -212,18 +213,18 @@ app.delete('/investimentos/:id', verificarToken, async (req, res) => {
 
 
 async function startServer() {
-  try {
-    await prisma.$connect()
-    console.log('✅ Conectado ao banco')
+    try {
+        await prisma.$connect()
+        console.log('✅ Conectado ao banco')
 
-    app.listen(PORT, () => {
-      console.log(`🚀 Servidor rodando na porta ${PORT}`)
-    })
+        app.listen(PORT, () => {
+            console.log(`🚀 Servidor rodando na porta ${PORT}`)
+        })
 
-  } catch (error) {
-    console.error('❌ Erro ao conectar no banco:', error)
-    process.exit(1)
-  }
+    } catch (error) {
+        console.error('❌ Erro ao conectar no banco:', error)
+        process.exit(1)
+    }
 }
 
 startServer()
