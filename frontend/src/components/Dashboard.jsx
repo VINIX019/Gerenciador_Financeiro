@@ -403,7 +403,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     await axios.post(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos`, {
                         nome: nomeFinal, valor: valorTotalAtivo,
                         quantidade: formValues.tipo === 'CDB' ? 1 : quantidadeInformada,
-                        tipo: formValues.tipo, 
+                        tipo: formValues.tipo,
                         userId: Number(user.id)
                     }, { headers: { Authorization: `Bearer ${token}` } });
                 }
@@ -459,7 +459,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 valor: valorNumerico,
                 tipo: tipo, // 'entrada' ou 'saida'
                 userId: Number(user.id),
-                data: dataTransacao // Certifique-se que o backend usa 'createdAt' ou 'data'
+                data: new Date(dataTransacao + "T12:00:00") // Certifique-se que o backend usa 'createdAt' ou 'data'
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -613,8 +613,8 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                 <tr>
                                     <th className="px-4 py-3">Descrição</th>
                                     <th className="px-4 py-3 text-right">Valor</th>
-                                    <th className="px-4 py-3 text-center">Ações</th>
                                     <th className='px-4 py-3 text-center'>Data</th>
+                                    <th className="px-4 py-3 text-center">Ações</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
@@ -626,7 +626,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                                 <div className="text-slate-600 font-medium">{t.descricao}</div>
                                                 <div className="text-[10px] text-slate-400">
                                                     {/* Mostra 'data' se existir, se não, mostra 'createdAt' */}
-                                                    {new Date(t.data || t.createdAt).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                                                    new Date(t.data || t.createdAt).toLocaleDateString('pt-BR')
                                                 </div>
                                             </td>
                                             <td className={`px-4 py-3 text-right font-bold ${t.tipo === 'entrada' ? 'text-emerald-600' : 'text-rose-600'}`}>

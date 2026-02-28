@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Usuarios {
@@ -21,11 +22,12 @@ model Transacoes {
   id        Int      @id @default(autoincrement())
   descricao String
   valor     Float
-  tipo      String // "receita" ou "despesa"
-  data      DateTime @default(now())
+  tipo      String // "entrada" ou "saida"
+
+  data      DateTime @db.Date   // 👈 APENAS DATA, SEM HORA
+
   createdAt DateTime @default(now())
 
-  // Relacionamento com Usuário
   userId  Int
   usuario Usuarios @relation(fields: [userId], references: [id])
 }
