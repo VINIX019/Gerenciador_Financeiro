@@ -90,7 +90,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     const carregarHistorico = useCallback(async () => {
         const token = localStorage.getItem('token');
         try {
-            const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/transacoes/${Number(user.id)}`, {
+            const response = await axios.get(`https://gerenciador-financeiro-1-6cpc.onrender.com/transacoes/${Number(user.id)}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setHistorico(response.data);
@@ -115,7 +115,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
         try {
             // Quando você hospedar seu backend, troque essa URL
-            const response = await axios.get(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${Number(user.id)}`, {
+            const response = await axios.get(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${Number(user.id)}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -188,7 +188,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 const token = localStorage.getItem('token');
                 // Aqui ele apenas salva a nova quantidade, 
                 // a função carregarInvestimentos() vai atualizar o preço automaticamente logo depois
-                await axios.put(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${inv.id}`, {
+                await axios.put(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${inv.id}`, {
                     ...inv,
                     quantidade: parseFloat(novaQtd.replace(',', '.'))
                 }, { headers: { Authorization: `Bearer ${token}` } });
@@ -396,11 +396,11 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     const novaQtd = ativoExistente.tipo === 'CDB' ? 1 : Number(ativoExistente.quantidade) + quantidadeInformada;
                     const novoValor = ativoExistente.tipo === 'CDB' ? Number(ativoExistente.valor) + valorTotalAtivo : Number((precoUnitario * novaQtd).toFixed(2));
 
-                    await axios.put(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${ativoExistente.id}`, {
+                    await axios.put(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${ativoExistente.id}`, {
                         ...ativoExistente, quantidade: novaQtd, valor: novoValor
                     }, { headers: { Authorization: `Bearer ${token}` } });
                 } else {
-                    await axios.post(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos`, {
+                    await axios.post(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos`, {
                         nome: nomeFinal, valor: valorTotalAtivo,
                         quantidade: formValues.tipo === 'CDB' ? 1 : quantidadeInformada,
                         tipo: formValues.tipo, 
@@ -418,7 +418,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     };
     const handleDeleteTransacao = async (id) => {
         try {
-            await axios.delete(`https://gerenciador-financeiro-4lyf.onrender.com/transacoes/${id}`, {
+            await axios.delete(`https://gerenciador-financeiro-1-6cpc.onrender.com/transacoes/${id}`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             });
             carregarHistorico(); atualizarSaldo();
@@ -429,7 +429,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         const confirm = await Swal.fire({ title: 'Excluir?', showCancelButton: true, confirmButtonColor: '#d33' });
         if (confirm.isConfirmed) {
             try {
-                await axios.delete(`https://gerenciador-financeiro-4lyf.onrender.com/investimentos/${id}`, {
+                await axios.delete(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${id}`, {
                     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
                 });
                 carregarInvestimentos();
@@ -454,7 +454,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             }
 
             // 3. Chamada à API
-            await axios.post(`https://gerenciador-financeiro-4lyf.onrender.com/transacoes`, {
+            await axios.post(`https://gerenciador-financeiro-1-6cpc.onrender.com/transacoes`, {
                 descricao: descricao,
                 valor: valorNumerico,
                 tipo: tipo, // 'entrada' ou 'saida'
