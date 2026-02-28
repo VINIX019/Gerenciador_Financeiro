@@ -15,6 +15,7 @@ app.use(cors({
 }));
 
 const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui_123";
+const PORT = process.env.PORT || 10000;
 
 // --- MIDDLEWARE DE AUTENTICAÇÃO ---
 function verificarToken(req, res, next) {
@@ -224,3 +225,5 @@ async function startServer() {
     process.exit(1)
   }
 }
+
+startServer()
