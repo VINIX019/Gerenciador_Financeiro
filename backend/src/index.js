@@ -14,7 +14,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-const SECRET_KEY = process.env.JWT_SECRET || "minha_chave_secreta_ultra_segura_123";
+const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui_123";
 
 // --- MIDDLEWARE DE AUTENTICAÇÃO ---
 function verificarToken(req, res, next) {
