@@ -26,7 +26,7 @@ function verificarToken(req, res, next) {
 
     try {
         const decoded = jwt.verify(token, SECRET_KEY);
-        req.usuarioLogado = decoded; // Contém o ID do usuário vindo do token
+        req.usuarioLogado = decoded;
         next();
     } catch (error) {
         return res.status(401).json({ error: "Token inválido ou expirado." });
@@ -41,115 +41,92 @@ app.post('/usuarios', async (req, res) => {
         const { nome, email, senha } = req.body;
         const senhaHash = await bcrypt.hash(senha, 10);
         const novoUsuario = await prisma.usuarios.create({
-            data: { nome, email, senha: senhaHash },
+            data: { nome, email, senha: senhaHash }
         });
         res.status(201).json(novoUsuario);
     } catch (error) {
-        // ESSA LINHA É A MAIS IMPORTANTE:
-        console.error("ERRO DETALHADO DO PRISMA:", error);
-
-        res.status(400).json({
-            error: "Erro no cadastro",
-            message: error.message, // Isso vai aparecer no seu Console do Navegador (F12)
-            code: error.code        // Ex: P2021, P2002...
-        });
+        console.error("ERRO NO CADASTRO:", error);
+        res.status(500).json({ error: "Erro ao criar conta. Email já existe?" });
     }
 });
 
 // Login
 app.post('/login', async (req, res) => {
-    const { email, senha } = req.body;
     try {
+        const { email, senha } = req.body;
         const usuario = await prisma.usuarios.findUnique({ where: { email } });
-        if (!usuario) return res.status(401).json({ error: "E-mail não encontrado." });
 
-        const senhaValida = await bcrypt.compare(senha, usuario.senha);
-        if (!senhaValida) return res.status(401).json({ error: "Senha incorreta." });
+        if (!usuario || !(await bcrypt.compare(senha, usuario.senha))) {
+            return res.status(401).json({ error: "Credenciais inválidas." });
+        }
 
-        // O segredo: No Postgres, usuario.id já é um Number. 
-        // Não force toString() aqui para evitar conflitos no futuro.
-        const token = jwt.sign({ id: usuario.id }, SECRET_KEY, { expiresIn: '1d' });
-
-        res.json({
-            token,
-            user: {
-                id: usuario.id, // Isso retornará 1, 2, 3...
-                nome: usuario.nome,
-                email: usuario.email
-            }
-        });
+        const token = jwt.sign({ id: usuario.id }, SECRET_KEY, { expiresIn: '7d' });
+        res.json({ token, user: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
     } catch (error) {
-        console.error("ERRO NO LOGIN:", error); // Verifique isso nos logs do Render!
+        console.error("ERRO NO LOGIN:", error);
         res.status(500).json({ error: "Erro interno no servidor." });
     }
 });
 
-// Buscar dados do usuário logado
-app.get('/usuarios/:id', verificarToken, async (req, res) => {
+// Buscar Saldo (Corrigido para converter ID para Number)
+app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
     try {
-        const usuario = await prisma.usuarios.findUnique({
-            where: { id: Number(req.params.id) }
-        });
-        if (!usuario) return res.status(404).json({ error: "Usuário não encontrado." });
-        const { senha, ...dados } = usuario;
-        res.json(dados);
+        const userId = Number(req.params.id);
+        const transacoes = await prisma.transacoes.findMany({ where: { userId } });
+
+        const total = transacoes.reduce((acc, t) => {
+            return t.tipo === 'entrada' ? acc + t.valor : acc - t.valor;
+        }, 0);
+
+        res.json({ total });
     } catch (error) {
-        res.status(500).json({ error: "Erro ao buscar dados." });
+        console.error("ERRO AO BUSCAR SALDO:", error);
+        res.status(500).json({ error: "Erro ao calcular saldo." });
     }
 });
 
 // --- ROTAS DE TRANSAÇÕES ---
 
-// Listar transações do usuário
 app.get('/transacoes/:userId', verificarToken, async (req, res) => {
     try {
-        const transacoes = await prisma.transacoes.findMany({
-            where: { userId: Number(req.params.userId) },
+        const userId = Number(req.params.userId);
+        const lista = await prisma.transacoes.findMany({
+            where: { userId },
             orderBy: { data: 'desc' }
         });
-        res.json(transacoes);
+        res.json(lista);
     } catch (error) {
-        res.status(500).json({ error: "Erro ao buscar transações." });
+        console.error("ERRO AO BUSCAR TRANSAÇÕES:", error);
+        res.status(500).json({ error: "Erro ao carregar histórico." });
     }
 });
 
-// Criar transação
 app.post('/transacoes', verificarToken, async (req, res) => {
     try {
-        const { descricao, valor, tipo, userId } = req.body;
+        // CORREÇÃO: Adicionado 'data' no destructuring
+        const { descricao, valor, tipo, userId, data } = req.body;
         const nova = await prisma.transacoes.create({
             data: {
                 descricao,
                 valor: parseFloat(valor),
                 tipo,
-                data: new Date(data),
+                data: data ? new Date(data) : new Date(),
                 userId: Number(userId)
             }
         });
         res.status(201).json(nova);
     } catch (error) {
+        console.error("ERRO AO CRIAR TRANSAÇÃO:", error);
         res.status(500).json({ error: "Erro ao criar transação." });
     }
 });
 
-// Calcular Saldo
-app.get('/usuarios/:id/saldo', verificarToken, async (req, res) => {
-    try {
-        const userId = Number(req.params.id);
-        const transacoes = await prisma.transacoes.findMany({ where: { userId } });
-        const total = transacoes.reduce((acc, t) => t.tipo === 'entrada' ? acc + t.valor : acc - t.valor, 0);
-        res.json({ total });
-    } catch (error) {
-        res.status(500).json({ error: "Erro ao calcular saldo." });
-    }
-});
-
-// Apagar Transação
 app.delete('/transacoes/:id', verificarToken, async (req, res) => {
     try {
         await prisma.transacoes.delete({ where: { id: Number(req.params.id) } });
-        res.json({ message: "Removida com sucesso." });
+        res.json({ message: "Transação removida." });
     } catch (error) {
+        console.error("ERRO AO APAGAR TRANSAÇÃO:", error);
         res.status(500).json({ error: "Erro ao apagar." });
     }
 });
@@ -158,12 +135,11 @@ app.delete('/transacoes/:id', verificarToken, async (req, res) => {
 
 app.get('/investimentos/:userId', verificarToken, async (req, res) => {
     try {
-        const lista = await prisma.investimento.findMany({
-            where: { userId: Number(req.params.userId) },
-            orderBy: { createdAt: 'desc' }
-        });
+        const userId = Number(req.params.userId);
+        const lista = await prisma.investimento.findMany({ where: { userId } });
         res.json(lista);
     } catch (error) {
+        console.error("ERRO AO BUSCAR INVESTIMENTOS:", error);
         res.status(500).json({ error: "Erro ao buscar investimentos." });
     }
 });
@@ -182,6 +158,7 @@ app.post('/investimentos', verificarToken, async (req, res) => {
         });
         res.status(201).json(novo);
     } catch (error) {
+        console.error("ERRO AO CRIAR INVESTIMENTO:", error);
         res.status(500).json({ error: "Erro ao criar investimento." });
     }
 });
@@ -198,6 +175,7 @@ app.put('/investimentos/:id', verificarToken, async (req, res) => {
         });
         res.json(atualizado);
     } catch (error) {
+        console.error("ERRO AO ATUALIZAR INVESTIMENTO:", error);
         res.status(500).json({ error: "Erro ao atualizar." });
     }
 });
@@ -207,24 +185,21 @@ app.delete('/investimentos/:id', verificarToken, async (req, res) => {
         await prisma.investimento.delete({ where: { id: Number(req.params.id) } });
         res.json({ message: "Removido com sucesso." });
     } catch (error) {
+        console.error("ERRO AO APAGAR INVESTIMENTO:", error);
         res.status(500).json({ error: "Erro ao apagar." });
     }
 });
 
-
+// Inicialização do Servidor
 async function startServer() {
     try {
-        await prisma.$connect()
-        console.log('✅ Conectado ao banco')
-
-        app.listen(PORT, () => {
-            console.log(`🚀 Servidor rodando na porta ${PORT}`)
-        })
-
+        await prisma.$connect();
+        console.log('✅ Conectado ao banco de dados com sucesso!');
+        app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
     } catch (error) {
-        console.error('❌ Erro ao conectar no banco:', error)
-        process.exit(1)
+        console.error('❌ Erro fatal ao conectar ao banco:', error);
+        process.exit(1);
     }
 }
 
-startServer()
+startServer();
