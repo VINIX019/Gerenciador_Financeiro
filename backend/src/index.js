@@ -44,10 +44,13 @@ app.post('/usuarios', async (req, res) => {
         });
         res.status(201).json(novoUsuario);
     } catch (error) {
-        console.error("ERRO REAL NO CADASTRO:", error); // <--- ADICIONE ESTA LINHA
+        // ESSA LINHA É A MAIS IMPORTANTE:
+        console.error("ERRO DETALHADO DO PRISMA:", error);
+        
         res.status(400).json({ 
             error: "Erro no cadastro", 
-            details: error.message // <--- ADICIONE ESTA LINHA PARA VER NO NAVEGADOR
+            message: error.message, // Isso vai aparecer no seu Console do Navegador (F12)
+            code: error.code        // Ex: P2021, P2002...
         });
     }
 });
