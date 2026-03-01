@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import {
     ArrowUpCircle, ArrowDownCircle, DollarSign, LogOut,
     TrendingUp, Trash2, Plus, RefreshCw, Edit,
-    ChevronDown, ChevronUp, Calendar
+    ChevronDown, ChevronUp, Calendar, Search
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
@@ -32,6 +32,10 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     const [mesSelecionado, setMesSelecionado] = useState(new Date().getMonth().toString());
     const [dolar, setDolar] = useState(5.20);
     const [anoSelecionado, setAnoSelecionado] = useState(new Date().getFullYear());
+    const [extratoAberto, setExtratoAberto] = useState(true);
+    const [modalInvestimentosAberto, setModalInvestimentosAberto] = useState(false);
+    const [buscaAtivo, setBuscaAtivo] = useState('');
+
 
     const fetchDolar = useCallback(async () => {
         try {
@@ -48,22 +52,28 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             // Não fazemos nada, o state já inicia com 5.50
         }
     }, []);
-    const fetchCripto = async (ticker = "BTC") => {
+
+
+    // Função para buscar preço de Ações/FIIs na API da Brapi
+    const fetchCripto = async (ticker) => {
         try {
-            const symbol = `${ticker}BRL`;
-            const targetUrl = `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`;
-
-            // O AllOrigins contorna o erro 403/CORS
-            const response = await axios.get(`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`);
-
-            // AllOrigins retorna os dados dentro de 'contents' como string
-            const data = JSON.parse(response.data.contents);
-
-            if (data.price) {
-                setPrecoCripto(data.price);
-            }
+            const symbol = ticker.replace('USDT', '') + 'USDT';
+            const response = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol.toUpperCase()}`);
+            return parseFloat(response.data.price) || 0;
         } catch (error) {
-            console.error("Erro Binance (Cripto):", error.message);
+            console.error("Erro Binance:", error);
+            return 0;
+        }
+    };
+
+    const fetchAcaoB3 = async (ticker) => {
+        try {
+            // Use o seu token da Brapi aqui
+            const response = await axios.get(`https://brapi.dev/api/quote/${ticker}?token=SEU_TOKEN_AQUI`);
+            return response.data.results[0].regularMarketPrice || 0;
+        } catch (error) {
+            console.error("Erro B3:", error);
+            return 0;
         }
     };
 
@@ -142,34 +152,33 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     const CORES = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308'];
     const CORES_TIPOS_INV = {
         'B3': '#06b6d4',     // Ciano
-        'BTC': '#f59e0b',    // Laranja
+        'Criptomoeda': '#f59e0b',    // Laranja
         'CDB': '#10b981',    // Verde
         'STOCKS': '#8b5cf6', // Roxo (ou a cor que preferir)
     };
 
-    // Gráfico 1: Investimentos
     // Gráfico 1: Investimentos (Com o campo 'tipo' para a cor)
     const dadosInvestimentos = React.useMemo(() => {
         const lista = Array.isArray(listaInvestimentos) ? listaInvestimentos : [];
 
         const agrupado = lista.reduce((acc, inv) => {
-            const tipo = (inv.tipo || 'OUTROS').toUpperCase();
+            // Normaliza BTC para Criptomoeda para garantir a cor correta
+            const tipoOriginal = (inv.tipo || 'OUTROS').toUpperCase();
+            const tipoChave = tipoOriginal === 'BTC' ? 'Criptomoeda' : inv.tipo;
 
-            // IMPORTANTE: Aqui pegamos o valor que já está na tabela.
-            // Como 'carregarInvestimentos' já faz Valor * Qtd, aqui apenas lemos o resultado.
             const valorTotalJaCalculado = typeof inv.valor === 'string'
                 ? parseFloat(inv.valor.replace(',', '.'))
                 : Number(inv.valor);
 
-            if (!acc[tipo]) acc[tipo] = 0;
-            acc[tipo] += (valorTotalJaCalculado || 0);
+            if (!acc[tipoChave]) acc[tipoChave] = 0;
+            acc[tipoChave] += (valorTotalJaCalculado || 0);
             return acc;
         }, {});
 
         return Object.keys(agrupado).map(tipo => ({
-            name: tipo,
+            name: tipo, // Agora aparecerá "Criptomoeda" em vez de "BTC"
             value: agrupado[tipo],
-            tipo: tipo
+            tipo: tipo  // Isso garante que CORES_TIPOS_INV['Criptomoeda'] seja encontrado
         }));
     }, [listaInvestimentos]);
     // Gráfico 2: Transações (Fixando Verde e Vermelho)
@@ -260,53 +269,71 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
     const handleEditarInvestimento = async (inv) => {
         const isCDB = inv.tipo === 'CDB';
+        const isCripto = inv.tipo === 'Criptomoeda';
+        const isStock = inv.tipo === 'STOCKS';
 
-        // Preparar o valor inicial que aparecerá no campo de texto
+        // Para Cripto e Stocks, usamos mais casas decimais no visual
+        const casasDecimais = isCDB ? 2 : isStock ? 4 : isCripto ? 8 : 2;
+
         const valorInicial = isCDB
-            ? Number(inv.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
-            : inv.quantidade;
+            ? Number(inv.valor).toFixed(2)
+            : Number(inv.quantidade).toString(); // Usamos toString para não forçar zeros desnecessários
 
         const { value: novoValorOuQtd } = await Swal.fire({
             title: `Editar ${inv.nome}`,
             input: 'text',
-            inputLabel: isCDB ? 'Novo Valor Total (R$)' : 'Nova Quantidade',
-            inputValue: valorInicial, // <--- Aqui ele mostrará os 6.500,00 em vez de 1
+            inputValue: valorInicial,
             showCancelButton: true,
-            confirmButtonText: 'Salvar Alteração',
+            confirmButtonText: 'Salvar',
             cancelButtonText: 'Cancelar',
-            inputValidator: (value) => {
-                if (!value) return 'Você precisa digitar um valor!';
-            }
         });
 
         if (novoValorOuQtd) {
             try {
                 const token = localStorage.getItem('token');
-                // Limpa pontos de milhar e troca vírgula por ponto para o banco
-                const valorTratado = parseFloat(novoValorOuQtd.replace(/\./g, '').replace(',', '.'));
 
-                const dadosAtualizados = { ...inv };
+                // CORREÇÃO DA LIMPEZA:
+                // 1. Se o usuário digitar "1.500,50", queremos "1500.50"
+                // 2. Se o usuário digitar "1.5", queremos "1.5"
+
+                let valorFormatado = novoValorOuQtd.trim();
+
+                // Se houver vírgula E ponto, o ponto é milhar. Ex: 1.500,50 -> 1500,50
+                if (valorFormatado.includes(',') && valorFormatado.includes('.')) {
+                    valorFormatado = valorFormatado.replace(/\./g, '');
+                }
+
+                // Troca a vírgula pelo ponto decimal final
+                valorFormatado = valorFormatado.replace(',', '.');
+
+                const valorTratado = parseFloat(valorFormatado);
+
+                if (isNaN(valorTratado)) {
+                    return toast.error("Valor inválido");
+                }
+
+                let dadosAtualizados = { ...inv };
 
                 if (isCDB) {
-                    // No CDB, atualizamos o valor e mantemos a quantidade como 1
                     dadosAtualizados.valor = valorTratado;
                     dadosAtualizados.quantidade = 1;
                 } else {
-                    // Em Ações/Cripto, atualizamos a quantidade e deixamos o sistema recalcular o valor
+                    // Para Cripto/Stocks, salvamos a quantidade com todos os decimais
                     dadosAtualizados.quantidade = valorTratado;
                 }
 
-                await axios.put(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${inv.id}`,
+                await axios.put(
+                    `https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${inv.id}`,
                     dadosAtualizados,
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
 
-                toast.success("Investimento atualizado!");
-                carregarInvestimentos(); // Atualiza a tela
-
+                toast.success("Atualizado!");
+                // IMPORTANTE: O carregarInvestimentos() vai multiplicar essa qtd pelo preço da API
+                carregarInvestimentos();
             } catch (error) {
-                console.error("Erro ao editar:", error);
-                toast.error("Erro ao salvar alterações.");
+                toast.error("Erro ao salvar.");
+                console.error(error);
             }
         }
     };
@@ -403,7 +430,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             <select id="swal-tipo" class="swal2-select" style="width: 100%; margin: 0; height: 40px; border-radius: 8px;">
                 <option value="B3">Ação / FII (Brasil - B3)</option>
                 <option value="STOCKS">Stocks / REITs (Exterior - US$)</option>
-                <option value="BTC">Criptomoedas</option>
+                <option value="Criptomoeda">Criptomoedas</option>
                 <option value="CDB">CDB / Renda Fixa</option>
             </select>
         </div>
@@ -443,7 +470,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 } catch (e) { console.error("Erro dólar, usando padrão"); }
 
                 // --- LÓGICA DE CRIPTO (CORRIGIDA) ---
-                if (formValues.tipo === 'BTC') {
+                if (formValues.tipo === 'Criptomoeda') {
                     const tickerLimpo = formValues.ticker.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
                     toast.info(`Buscando ${tickerLimpo} na Binance...`);
 
@@ -790,137 +817,153 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </CardContent>
                 </Card>
             </div>
-            <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-2">
+            <div className="max-w-6xl mx-auto grid gap-6 grid-cols-1 lg:grid-cols-2 items-start">
+
+                {/* CARD EXTRATO - PADRONIZADO */}
                 <Card className="shadow-md border-slate-200 overflow-hidden bg-white">
-                    <CardHeader className="border-b bg-slate-50/50">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <CardTitle className="text-md font-bold text-slate-700">Extrato </CardTitle>
-                                <p className="text-[10px] text-slate-500 uppercase">Movimentações recentes</p>
-                            </div>
-                            <Button
-                                onClick={() => setModalExtratoAberto(true)}
-                                variant="outline"
-                                className="h-8 text-[11px] font-bold border-slate-300 hover:bg-slate-100"
-                            >
-                                VER EXTRATO DETALHADO
-                            </Button>
-                        </div>
-                    </CardHeader>
-
-                    <CardContent className="p-0">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold">
-                                <tr>
-                                    <th className="px-4 py-3">Descrição</th>
-                                    <th className="px-4 py-3 text-right">Valor</th>
-                                    <th className="px-4 py-3 text-center">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {historico
-                                    .sort((a, b) => new Date(b.data || b.createdAt) - new Date(a.data || a.createdAt)) // Ordena: Mais recente no topo
-                                    .map((t) => (
-                                        <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-4 py-3">
-                                                <div className="text-slate-600 font-medium">{t.descricao}</div>
-                                                <div className="text-[10px] text-slate-400">
-                                                    {(() => {
-                                                        const d = new Date(t.data || t.createdAt);
-                                                        // Adiciona a diferença de fuso para que a data não retroceda
-                                                        d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
-                                                        return d.toLocaleDateString('pt-BR');
-                                                    })()}
-                                                </div>
-                                            </td>
-                                            <td className={`px-4 py-3 text-right font-bold ${t.tipo === 'entrada' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                {t.tipo === 'entrada' ? '+' : '-'} R$ {Number(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                            </td>
-
-                                            <td className="px-4 py-3 text-center">
-                                                <button
-                                                    onClick={() => handleDeleteTransacao(t.id)}
-                                                    className="text-slate-300 hover:text-rose-500 transition-colors"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                            </tbody>
-                        </table>
-
-                        {historico.length === 0 && (
-                            <div className="p-10 text-center text-slate-400 text-xs italic">
-                                Nenhuma movimentação encontrada.
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <Card className="shadow-md border-slate-200 overflow-hidden bg-white">
-                    <CardHeader className="border-b bg-slate-50/50 flex flex-row items-center justify-between cursor-pointer"
-                        onClick={() => setCarteiraAberta(!carteiraAberta)}>
-                        <div className="flex items-center gap-2">
-                            <CardTitle className="text-md">Carteira de Ativos</CardTitle>
-                            <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
-                                {listaInvestimentos.length} ativos
-                            </span>
+                    <CardHeader
+                        className="border-b bg-slate-50/50 flex flex-row items-center justify-between cursor-pointer p-4 md:p-6"
+                        onClick={() => setExtratoAberto(!extratoAberto)}
+                    >
+                        <div className="flex flex-col">
+                            <CardTitle className="text-md font-bold text-slate-700">Extrato Recente</CardTitle>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Últimas movimentações</p>
                         </div>
                         <div className="flex items-center gap-4">
-                            <RefreshCw size={14} className="text-slate-400 cursor-pointer hover:rotate-180 transition-all" onClick={(e) => { e.stopPropagation(); carregarInvestimentos(); }} />
-                            {carteiraAberta ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
+                            <Button
+                                onClick={(e) => { e.stopPropagation(); setModalExtratoAberto(true); }}
+                                variant="outline"
+                                className="hidden sm:flex h-7 text-[10px] font-bold border-slate-300 hover:bg-slate-100"
+                            >
+                                DETALHADO
+                            </Button>
+                            <div className="text-slate-400">
+                                {extratoAberto ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                            </div>
                         </div>
                     </CardHeader>
 
-                    {/* ANIMAÇÃO DE ABRIR/FECHAR E SCROLL */}
-                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${carteiraAberta ? 'max-h-[500px] overflow-y-auto' : 'max-h-0'}`}>
+                    {/* ÁREA DE CONTEÚDO COM SCROLL E ANIMAÇÃO */}
+                    <div className={`transition-all duration-300 ease-in-out ${extratoAberto ? 'max-h-[450px] overflow-y-auto' : 'max-h-0 overflow-hidden'}`}>
                         <CardContent className="p-0">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold sticky top-0 z-10">
-                                    <tr>
-                                        <th className="px-6 py-3">Ticker / Empresa</th>
-                                        <th className="px-6 py-3 text-right">Valor Total</th>
-                                        <th className="px-6 py-3 text-center">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {listaInvestimentos.map((inv) => (
-                                        <tr key={inv.id} className="hover:bg-slate-50">
-                                            <td className="px-6 py-4">
-                                                {/* Título: Ex: PETR4 ou CDB */}
-                                                <div className="font-bold text-slate-800">
-                                                    {inv.nome.split(' - ')[0]}
-                                                </div>
-
-                                                {/* Subtítulo Dinâmico: Quantidade ou Tipo de Renda */}
-                                                <div className="text-[10px] text-cyan-600 font-bold uppercase tracking-wider">
-                                                    {inv.tipo === 'CDB'
-                                                        ? 'Renda Fixa'
-                                                        : `${inv.quantidade?.toLocaleString('pt-BR')} unidades`
-                                                    }
-                                                </div>
-
-                                                {/* Nome da Empresa/Banco: Ex: Petroleo Brasileiro ou Mercado Pago */}
-                                                {inv.nome.includes(' - ') && (
-                                                    <div className="text-[10px] text-slate-400 truncate max-w-[150px]">
-                                                        {inv.nome.split(' - ')[1]}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-bold text-cyan-700">
-                                                R$ {Number(inv.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <div className="flex justify-center gap-3">
-                                                    <button onClick={() => handleEditarInvestimento(inv)} className="text-slate-400 hover:text-cyan-600"><Edit size={16} /></button>
-                                                    <button onClick={() => handleDeleteInvestimento(inv.id)} className="text-slate-400 hover:text-rose-500"><Trash2 size={16} /></button>
-                                                </div>
-                                            </td>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left border-collapse">
+                                    <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold sticky top-0 z-20 shadow-sm">
+                                        <tr>
+                                            <th className="px-4 py-3">Descrição</th>
+                                            <th className="px-4 py-3 text-right">Valor</th>
+                                            <th className="px-4 py-3 text-center">Ação</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y bg-white">
+                                        {historico
+                                            .sort((a, b) => new Date(b.data || b.createdAt) - new Date(a.data || a.createdAt))
+                                            .slice(0, 15)
+                                            .map((t) => (
+                                                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <div className="text-slate-600 font-medium text-xs truncate max-w-[120px] md:max-w-none">{t.descricao}</div>
+                                                        <div className="text-[10px] text-slate-400">
+                                                            {new Date(t.data || t.createdAt).toLocaleDateString('pt-BR')}
+                                                        </div>
+                                                    </td>
+                                                    <td className={`px-4 py-3 text-right font-bold text-xs whitespace-nowrap ${t.tipo === 'entrada' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                        {t.tipo === 'entrada' ? '+' : '-'} R$ {Number(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteTransacao(t.id); }} className="p-1 text-slate-300 hover:text-rose-500">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </CardContent>
+                    </div>
+                </Card>
+
+                {/* CARD CARTEIRA DE ATIVOS - PADRONIZADO */}
+                <Card className="shadow-md border-slate-200 overflow-hidden bg-white">
+                    <CardHeader
+                        className="border-b bg-slate-50/50 flex flex-row items-center justify-between cursor-pointer p-4 md:p-6"
+                        onClick={() => setCarteiraAberta(!carteiraAberta)}
+                    >
+                        <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                                <CardTitle className="text-md font-bold text-slate-700">Carteira de Ativos</CardTitle>
+                                <span className="text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-bold uppercase">
+                                    {listaInvestimentos.length} ativos
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Patrimônio alocado</p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            {/* BOTÃO DETALHADO IGUAL AO DO EXTRATO */}
+                            <Button
+                                onClick={(e) => { e.stopPropagation(); setModalInvestimentosAberto(true); }}
+                                variant="outline"
+                                className="hidden sm:flex h-7 text-[10px] font-bold border-slate-300 hover:bg-slate-100"
+                            >
+                                DETALHADO
+                            </Button>
+                            <RefreshCw
+                                size={14}
+                                className="text-slate-400 cursor-pointer hover:rotate-180 transition-all"
+                                onClick={(e) => { e.stopPropagation(); carregarInvestimentos(); }}
+                            />
+                            <div className="text-slate-400">
+                                {carteiraAberta ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                            </div>
+                        </div>
+                    </CardHeader>
+
+                    <div className={`transition-all duration-300 ease-in-out ${carteiraAberta ? 'max-h-[450px] overflow-y-auto' : 'max-h-0 overflow-hidden'}`}>
+                        <CardContent className="p-0">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left border-collapse">
+                                    <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold sticky top-0 z-20 shadow-sm">
+                                        <tr>
+                                            <th className="px-4 py-3">Ativo</th>
+                                            <th className="px-4 py-3 text-right">Valor</th>
+                                            <th className="px-4 py-3 text-right text-emerald-600">Prov. Est.</th>
+                                            <th className="px-4 py-3 text-center">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y bg-white">
+                                        {listaInvestimentos.map((inv) => {
+                                            const valorAtivo = Number(inv.valor) || 0;
+                                            const estimativa = inv.tipo === 'B3' ? valorAtivo * 0.008 : inv.tipo === 'STOCKS' ? valorAtivo * 0.003 : 0;
+
+                                            return (
+                                                <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-4 py-4">
+                                                        <div className="font-bold text-slate-800 text-xs">{inv.nome.split(' - ')[0]}</div>
+                                                        <div className="text-[9px] text-cyan-600 font-bold uppercase">{inv.tipo}</div>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-right font-bold text-slate-700 text-xs">
+                                                        R$ {valorAtivo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td className="px-4 py-4 text-right font-bold text-emerald-600 text-xs whitespace-nowrap">
+                                                        {estimativa > 0 ? (
+                                                            `R$ ${estimativa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                        ) : (
+                                                            <span className="text-slate-300">--</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-4 text-center">
+                                                        <div className="flex justify-center gap-2">
+                                                            <button onClick={() => handleEditarInvestimento(inv)} className="text-slate-400 hover:text-cyan-600 p-1"><Edit size={14} /></button>
+                                                            <button onClick={() => handleDeleteInvestimento(inv.id)} className="text-slate-400 hover:text-rose-500 p-1"><Trash2 size={14} /></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </CardContent>
                     </div>
                 </Card>
@@ -1029,6 +1072,105 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+            {/* MODAL DETALHAMENTO DA CARTEIRA */}
+            <Dialog open={modalInvestimentosAberto} onOpenChange={setModalInvestimentosAberto}>
+                <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
+                    <DialogHeader className="p-4 md:p-6 bg-white border-b border-slate-100">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex justify-between items-start md:block">
+                                <div>
+                                    <DialogTitle className="text-lg md:text-xl font-bold text-slate-800">Detalhamento da Carteira</DialogTitle>
+                                    <p className="text-slate-500 text-[10px] md:text-xs mt-1 uppercase tracking-wider">Histórico e Posição</p>
+                                </div>
+                                <div className="text-right md:hidden">
+                                    <p className="text-slate-400 text-[9px] uppercase font-bold">Total</p>
+                                    <p className="text-cyan-600 font-bold text-sm whitespace-nowrap">
+                                        R$ {investimentosTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="relative w-full md:w-72">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar ativo..."
+                                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                                    value={buscaAtivo}
+                                    onChange={(e) => setBuscaAtivo(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="text-right hidden md:block border-l pl-6 border-slate-100">
+                                <p className="text-slate-400 text-[10px] uppercase font-bold">Patrimônio Total</p>
+                                <p className="text-cyan-600 font-bold text-xl whitespace-nowrap">
+                                    R$ {investimentosTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-y-auto p-2 md:p-6 bg-slate-50/50">
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse min-w-[600px] md:min-w-full">
+                                    <thead className="bg-slate-50 text-slate-600 text-[10px] md:text-[11px] font-bold uppercase border-b border-slate-100 sticky top-0">
+                                        <tr>
+                                            <th className="px-3 md:px-6 py-4 hidden sm:table-cell">Data</th>
+                                            <th className="px-4 md:px-6 py-4">Ativo</th>
+                                            <th className="px-3 md:px-6 py-4 text-center">Tipo</th>
+                                            <th className="px-3 md:px-6 py-4 text-center">Qtd</th>
+                                            <th className="px-4 md:px-6 py-4 text-right">Total (R$)</th>
+                                            <th className="px-4 md:px-6 py-4 text-right text-emerald-600">Prov. Est.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {listaInvestimentos
+                                            .filter(inv => inv.nome.toLowerCase().includes(buscaAtivo.toLowerCase()))
+                                            .map((inv) => {
+                                                const valorAtivo = Number(inv.valor) || 0;
+                                                const estimativa = inv.tipo === 'B3' ? valorAtivo * 0.008 : inv.tipo === 'STOCKS' ? valorAtivo * 0.003 : 0;
+                                                const qtdCompleta = String(inv.quantidade).replace('.', ',');
+
+                                                return (
+                                                    <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                                                        <td className="px-3 md:px-6 py-4 text-[10px] md:text-xs text-slate-400 font-medium hidden sm:table-cell whitespace-nowrap">
+                                                            {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('pt-BR') : '--/--/----'}
+                                                        </td>
+                                                        <td className="px-4 md:px-6 py-4">
+                                                            <div className="font-bold text-slate-700 text-xs md:text-sm">{inv.nome}</div>
+                                                        </td>
+                                                        <td className="px-3 md:px-6 py-4 text-center">
+                                                            <span className={`px-2 py-0.5 rounded text-[9px] md:text-[10px] font-bold border ${inv.tipo === 'B3' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                                inv.tipo === 'STOCKS' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                                                                    inv.tipo === 'Criptomoeda' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                                                        'bg-slate-50 text-slate-600 border-slate-200'
+                                                                }`}>
+                                                                {inv.tipo}
+                                                            </span>
+                                                        </td>
+
+                                                        <td className="px-3 md:px-6 py-4 text-center font-medium text-slate-600 text-xs md:text-sm whitespace-nowrap">
+                                                            {qtdCompleta}
+                                                        </td>
+
+                                                        {/* ADICIONADO whitespace-nowrap ABAIXO */}
+                                                        <td className="px-4 md:px-6 py-4 text-right font-bold text-slate-700 text-xs md:text-sm whitespace-nowrap">
+                                                            R$ {valorAtivo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td className="px-4 md:px-6 py-4 text-right font-bold text-emerald-600 text-xs md:text-sm whitespace-nowrap">
+                                                            R$ {estimativa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </DialogContent>
