@@ -4,9 +4,9 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 // Adicionamos 'Calendar' na lista de ícones abaixo
 import {
-    ArrowUpCircle, ArrowDownCircle, DollarSign, LogOut,
+    Wallet, ArrowUpCircle, ArrowDownCircle, DollarSign, LogOut,
     TrendingUp, Trash2, Plus, RefreshCw, Edit,
-    ChevronDown, ChevronUp, Calendar, Search
+    ChevronDown, ChevronUp, Calendar, Search, Eye, EyeOff, X
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
@@ -35,7 +35,8 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     const [extratoAberto, setExtratoAberto] = useState(true);
     const [modalInvestimentosAberto, setModalInvestimentosAberto] = useState(false);
     const [buscaAtivo, setBuscaAtivo] = useState('');
-
+    const [mostrarValores, setMostrarValores] = useState(true);
+    const [categoriaSelecionada, setCategoriaSelecionada] = useState('saida');
 
     const fetchDolar = useCallback(async () => {
         try {
@@ -130,10 +131,29 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         , [transacoesFiltradas]);
 
     // 3. Monta os dados do Gráfico de Pizza (Pie)
-    const dadosTransacoes = React.useMemo(() => [
-        { name: 'Receitas', value: totalEntradasMes, tipo: 'entrada' },
-        { name: 'Despesas', value: totalSaidasMes, tipo: 'saida' }
-    ], [totalEntradasMes, totalSaidasMes]);
+    const dadosTransacoes = React.useMemo(() => {
+        // 1. Soma as Entradas
+        const entradas = transacoesFiltradas
+            .filter(t => t.tipo === 'entrada')
+            .reduce((acc, t) => acc + Number(t.valor), 0);
+
+        // 2. Soma as Saídas que NÃO são investimentos (não têm o 💎 ou [INVEST])
+        const gastos = transacoesFiltradas
+            .filter(t => t.tipo === 'saida' && !t.descricao?.includes('[INVEST]'))
+            .reduce((acc, t) => acc + Number(t.valor), 0);
+
+        // 3. Soma apenas o que você marcou como Investimento (Botão Azul)
+        const investimentos = transacoesFiltradas
+            .filter(t => t.tipo === 'saida' && t.descricao?.includes('[INVEST]'))
+            .reduce((acc, t) => acc + Number(t.valor), 0);
+
+        const base = [];
+        if (entradas > 0) base.push({ name: 'Entradas', value: entradas, color: '#10b981' });
+        if (gastos > 0) base.push({ name: 'Saídas (Gastos)', value: gastos, color: '#f43f5e' });
+        if (investimentos > 0) base.push({ name: 'Investimentos', value: investimentos, color: '#0891b2' });
+
+        return base;
+    }, [transacoesFiltradas]);
 
     const mesesNomes = [
         "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -569,28 +589,79 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         }
     };
 
-    const handleNovaTransacao = async (tipo) => {
+    const handleSalvarMovimentacao = async () => {
         if (!valor || !descricao || !dataTransacao) {
             return toast.warn("Preencha todos os campos!");
         }
+
+        // Lógica: se for categoria investimento, adiciona o prefixo para o gráfico ler
+        const descricaoFinal = categoriaSelecionada === 'investimento'
+            ? `[INVEST] ${descricao}`
+            : descricao;
+
+        // O "tipo" para o banco de dados continua sendo entrada ou saida
+        const tipoFinal = categoriaSelecionada === 'entrada' ? 'entrada' : 'saida';
 
         try {
             const token = localStorage.getItem('token');
             const valorNumerico = parseFloat(valor.replace(',', '.'));
 
-            // ENVIAMOS A STRING PURA (Ex: "2026-01-15")
-            // Não use "new Date(dataTransacao)" aqui, pois o fuso horário vai estragar a data.
             await axios.post(`https://gerenciador-financeiro-1-6cpc.onrender.com/transacoes`, {
-                descricao: descricao,
+                descricao: descricaoFinal,
                 valor: valorNumerico,
-                tipo: tipo,
+                tipo: tipoFinal,
                 userId: Number(user.id),
-                data: dataTransacao // String direta do input type="date"
+                data: dataTransacao
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            toast.success(`${tipo === 'entrada' ? 'Receita' : 'Despesa'} registada!`);
+            toast.success("Movimentação registrada!");
+
+            // Resetar campos
+            setValor('');
+            setDescricao('');
+            setCategoriaSelecionada('saida'); // Volta para o padrão
+
+            carregarHistorico();
+            if (atualizarSaldo) atualizarSaldo();
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Erro ao salvar.");
+        }
+    };
+    // 1. Adicionamos 'categoria' aqui nos parâmetros
+    const handleNovaTransacao = async (tipo, categoria = 'comum') => {
+        if (!valor || !descricao || !dataTransacao) {
+            return toast.warn("Preencha todos os campos!");
+        }
+
+        // 2. Criamos a descrição final (usando apenas [INVEST] para bater com o gráfico)
+        const descricaoFinal = categoria === 'investimento'
+            ? `[INVEST] ${descricao}`
+            : descricao;
+
+        try {
+            const token = localStorage.getItem('token');
+            const valorNumerico = parseFloat(valor.replace(',', '.'));
+
+            await axios.post(`https://gerenciador-financeiro-1-6cpc.onrender.com/transacoes`, {
+                descricao: descricaoFinal, // 3. IMPORTANTE: Enviamos a descricaoFinal aqui!
+                valor: valorNumerico,
+                tipo: tipo,
+                userId: Number(user.id),
+                data: dataTransacao
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            // Ajuste no Toast para ficar bonito
+            const msgSucesso = categoria === 'investimento' ? 'Investimento registrado!' :
+                (tipo === 'entrada' ? 'Receita registrada!' : 'Despesa registrada!');
+
+            toast.success(msgSucesso);
+
             setValor('');
             setDescricao('');
 
@@ -615,91 +686,181 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 </Button>
             </div>
 
-            <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3 mb-8">
+            <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3 mb-8 items-stretch">
                 {/* CARD DE SALDO BANCÁRIO */}
-                <Card style={{ backgroundColor: saldo >= 0 ? '#059669' : '#e11d48' }} className="text-white border-none shadow-lg">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-xs uppercase opacity-80">Saldo Bancário</CardTitle>
-                        <DollarSign size={18} />
+                <Card className={`relative overflow-hidden border-none shadow-xl h-[340px] flex flex-col text-white transition-all duration-700 ${(saldo || 0) > 0
+                        ? "bg-gradient-to-br from-emerald-600 to-emerald-800" // Verde: Positivo
+                        : (saldo || 0) < 0
+                            ? "bg-gradient-to-br from-red-600 to-red-900"    // Vermelho: Negativo
+                            : "bg-gradient-to-br from-slate-600 to-slate-800" // Cinza/Azul: Zero
+                    }`}>
+                    {/* Círculo decorativo de fundo */}
+                    <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-white/20 rounded-lg">
+                                <Wallet size={16} className="text-white" />
+                            </div>
+                            <CardTitle className="text-[10px] font-bold uppercase opacity-90 tracking-widest">
+                                Saldo em Conta
+                            </CardTitle>
+                        </div>
+                        <button
+                            onClick={() => setMostrarValores(!mostrarValores)}
+                            className="p-2 hover:bg-white/20 rounded-xl transition-all"
+                        >
+                            {mostrarValores ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
                     </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-black">R$ {(saldo || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+
+                    <CardContent className="flex-1 flex flex-col justify-center relative z-10">
+                        <div className="space-y-1">
+                            <p className="text-white/60 text-[10px] font-bold uppercase ml-1">
+                                {saldo > 0 ? "Valor Disponível" : saldo < 0 ? "Saldo Devedor" : "Sem Saldo"}
+                            </p>
+                            <div className="text-4xl font-black tracking-tighter">
+                                {mostrarValores
+                                    ? `R$ ${(saldo || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                    : "R$ ••••••"}
+                            </div>
+                        </div>
                     </CardContent>
+
+                    <div className="p-6 pt-0 relative z-10">
+                        <div className="bg-white/10 rounded-2xl p-3 backdrop-blur-sm border border-white/10">
+                            <p className="text-[10px] font-medium opacity-70">
+                                {saldo > 0
+                                    ? "Tudo em ordem com seu saldo"
+                                    : saldo < 0
+                                        ? "Atenção: regularize sua conta"
+                                        : "Sua conta está zerada"}
+                            </p>
+                        </div>
+                    </div>
                 </Card>
 
                 {/* CARD DE MOVIMENTAÇÃO */}
-                <Card className="shadow-sm border-slate-200">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-xs uppercase text-slate-500">Nova Movimentação</CardTitle>
+                <Card className="shadow-md border-slate-200 bg-white overflow-hidden">
+                    <div className={`h-1 w-full ${categoriaSelecionada === 'entrada' ? 'bg-emerald-500' :
+                        categoriaSelecionada === 'investimento' ? 'bg-cyan-500' : 'bg-rose-500'
+                        } transition-colors duration-300`} />
+
+                    <CardHeader className="pb-3 pt-4">
+                        <CardTitle className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Nova Movimentação
+                        </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2">
-                        <Input
-                            placeholder="O que foi?"
-                            value={descricao}
-                            onChange={(e) => setDescricao(e.target.value)}
-                            className="h-8 text-sm"
-                        />
-                        <Input
-                            placeholder="Valor R$"
-                            value={valor}
-                            onChange={(e) => setValor(e.target.value)}
-                            className="h-8 text-sm"
-                        />
-                        <Input
-                            type="date"
-                            value={dataTransacao}
-                            onChange={(e) => setDataTransacao(e.target.value)}
-                            className="h-8 text-sm text-slate-500"
-                        />
-                        <div className="flex gap-2">
-                            <Button onClick={() => handleNovaTransacao('entrada')} className="flex-1 bg-emerald-600 h-8">
-                                <ArrowUpCircle size={16} />
-                            </Button>
-                            <Button onClick={() => handleNovaTransacao('saida')} className="flex-1 bg-rose-600 h-8">
-                                <ArrowDownCircle size={16} />
-                            </Button>
+
+                    <CardContent className="space-y-4">
+                        {/* Seletor de Categoria */}
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Tipo de Transação</label>
+                            <select
+                                value={categoriaSelecionada}
+                                onChange={(e) => setCategoriaSelecionada(e.target.value)}
+                                className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-slate-900 outline-none transition-all cursor-pointer hover:bg-white"
+                            >
+                                <option value="entrada">📈 Entrada / Receita</option>
+                                <option value="saida">📉 Saída / Gasto</option>
+                                <option value="investimento">💎 Investimento / Aporte</option>
+                            </select>
                         </div>
+
+                        {/* Descrição */}
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Descrição</label>
+                            <Input
+                                placeholder="Ex: Aluguel, Uber, Dividendos..."
+                                value={descricao}
+                                onChange={(e) => setDescricao(e.target.value)}
+                                className="h-10 rounded-xl border-slate-200 bg-slate-50 focus:bg-white transition-all"
+                            />
+                        </div>
+
+                        {/* Valor e Data em Grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Valor R$</label>
+                                <Input
+                                    placeholder="0,00"
+                                    value={valor}
+                                    onChange={(e) => setValor(e.target.value)}
+                                    className="h-10 rounded-xl border-slate-200 bg-slate-50 focus:bg-white transition-all font-mono font-bold"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Data</label>
+                                <Input
+                                    type="date"
+                                    value={dataTransacao}
+                                    onChange={(e) => setDataTransacao(e.target.value)}
+                                    className="h-10 rounded-xl border-slate-200 bg-slate-50 focus:bg-white transition-all text-slate-500"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Botão de Ação */}
+                        <Button
+                            onClick={handleSalvarMovimentacao}
+                            className={`w-full h-12 rounded-xl text-white font-bold shadow-lg transition-all active:scale-95 ${categoriaSelecionada === 'entrada' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' :
+                                categoriaSelecionada === 'investimento' ? 'bg-cyan-600 hover:bg-cyan-700 shadow-cyan-200' :
+                                    'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
+                                }`}
+                        >
+                            REGISTRAR {categoriaSelecionada.toUpperCase()}
+                        </Button>
                     </CardContent>
                 </Card>
 
                 {/* CARD DE INVESTIMENTOS COM DIVIDENDOS INTEGRADOS */}
-                <Card style={{ backgroundColor: '#0f172a', color: 'white' }} className="border-none shadow-xl relative overflow-hidden flex flex-col justify-between">
-                    <div className="absolute top-0 right-0 p-3 opacity-10 text-cyan-400">
-                        <TrendingUp size={60} />
-                    </div>
+                <Card className="relative overflow-hidden border-none shadow-2xl h-[340px] flex flex-col bg-[#020617] text-white !bg-[#020617]">
+                    <div className="absolute -left-16 -bottom-16 w-64 h-64 bg-cyan-950/40 rounded-full blur-[80px] pointer-events-none" />
 
                     <CardHeader className="pb-2 relative z-10">
-                        <CardTitle className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Patrimônio em Ativos</CardTitle>
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-cyan-950 border border-cyan-800/50 rounded-lg">
+                                <TrendingUp size={16} className="text-cyan-400" />
+                            </div>
+                            <CardTitle className="text-[10px] font-bold text-cyan-500 uppercase tracking-widest">
+                                Patrimônio em Ativos
+                            </CardTitle>
+                        </div>
                     </CardHeader>
 
-                    <CardContent className="relative z-10 space-y-4">
-                        {/* Valor Total Investido */}
-                        <div>
-                            <div className="text-3xl font-black text-white">
-                                R$ {investimentosTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    <CardContent className="relative z-10 flex-1 flex flex-col justify-center">
+                        <div className="space-y-1">
+                            <p className="text-slate-500 text-[10px] font-bold uppercase ml-1 tracking-tight">Total Investido</p>
+                            <div className="text-4xl font-black text-white tracking-tighter" style={{ textShadow: '0 0 20px rgba(6, 182, 212, 0.2)' }}>
+                                {mostrarValores
+                                    ? `R$ ${(investimentosTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : "R$ ••••••"}
                             </div>
                         </div>
-
-                        {/* Linha Divisória Sutil */}
-                        <div className="border-t border-slate-700/50 pt-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-[9px] uppercase font-bold text-slate-400 tracking-tighter">Projeção Mensal de Dividendos</p>
-                                    <div className="text-lg font-bold text-emerald-400">
-                                        R$ {dividendosEstimados.toLocaleString('pt-BR', {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2
-                                        })}
-                                    </div>
-                                </div>
-                                <TrendingUp size={20} className="text-emerald-500/50" />
-                            </div>
-                        </div>
-
-                        <Button onClick={handleNovoInvestimento} className="w-full h-9 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold border-none transition-all">
-                            <Plus size={14} className="mr-2" /> SINCRONIZAR NOVO ATIVO
-                        </Button>
                     </CardContent>
+
+                    <div className="p-6 pt-0 relative z-10 space-y-4">
+                        <div className="flex items-center justify-between p-3 bg-slate-900/80 rounded-2xl border border-slate-800 backdrop-blur-md">
+                            <div>
+                                <p className="text-[9px] uppercase font-black text-slate-500 tracking-widest">Dividendos Mensais</p>
+                                <div className="text-lg font-bold text-emerald-500">
+                                    {mostrarValores
+                                        ? `R$ ${(dividendosEstimados || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : "R$ •••"}
+                                </div>
+                            </div>
+                            <div className="h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                                <TrendingUp size={16} className="text-emerald-500" />
+                            </div>
+                        </div>
+
+                        <Button
+                            onClick={handleNovoInvestimento}
+                            className="w-full h-11 bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-black border-none transition-all rounded-xl shadow-lg shadow-black/50 uppercase tracking-widest"
+                        >
+                            <Plus size={14} className="mr-2" /> Sincronizar Ativo
+                        </Button>
+                    </div>
                 </Card>
             </div>
 
@@ -712,11 +873,8 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             Resumo de {mesesNomes[parseInt(mesSelecionado)]} / {anoSelecionado}
                         </CardTitle>
 
-                        {/* Filtros de Mês e Ano */}
                         <div className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
                             <Calendar size={12} className="text-slate-400" />
-
-                            {/* Seletor de Mês */}
                             <select
                                 value={mesSelecionado}
                                 onChange={(e) => setMesSelecionado(e.target.value)}
@@ -726,10 +884,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                     <option key={index} value={index.toString()}>{month}</option>
                                 ))}
                             </select>
-
                             <span className="text-slate-300">|</span>
-
-                            {/* Seletor de Ano */}
                             <select
                                 value={anoSelecionado}
                                 onChange={(e) => setAnoSelecionado(Number(e.target.value))}
@@ -743,7 +898,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </CardHeader>
 
                     <CardContent className="h-[350px] w-full pt-6">
-                        {transacoesFiltradas.length > 0 ? (
+                        {dadosTransacoes.length > 0 ? (
                             <div style={{ width: '100%', height: '300px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
@@ -758,12 +913,12 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                             {dadosTransacoes.map((entry, index) => (
                                                 <Cell
                                                     key={`cell-${index}`}
-                                                    fill={entry.tipo === 'entrada' ? '#10b981' : '#f43f5e'}
+                                                    fill={entry.color} // Usa a cor definida na lógica (Verde, Vermelho ou Azul)
                                                 />
                                             ))}
                                         </Pie>
                                         <Tooltip
-                                            formatter={(v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                                            formatter={(v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                         />
                                         <Legend verticalAlign="bottom" height={36} />
                                     </PieChart>
@@ -971,8 +1126,17 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             <Dialog open={modalExtratoAberto} onOpenChange={setModalExtratoAberto}>
                 <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden bg-white p-0 border border-slate-200 shadow-2xl">
                     {/* Cabeçalho Claro e Minimalista */}
-                    <DialogHeader className="p-6 bg-white border-b border-slate-100">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <DialogHeader className="p-6 bg-white border-b border-slate-100 relative">
+                        {/* BOTÃO DE FECHAR */}
+                        <button
+                            onClick={() => setModalExtratoAberto(false)}
+                            className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all z-50"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pr-8">
+                            {/* pr-8 garante que o texto não bata no botão de fechar em telas menores */}
                             <div>
                                 <DialogTitle className="text-2xl font-bold text-slate-800 tracking-tight">
                                     Extrato Detalhado
@@ -982,12 +1146,12 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                 </p>
                             </div>
 
-                            <div className="relative">
-                                <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                            <div className="relative flex items-center">
+                                <Calendar className="absolute left-3 h-4 w-4 text-slate-400 pointer-events-none" />
                                 <select
                                     value={mesSelecionado}
                                     onChange={(e) => setMesSelecionado(e.target.value)}
-                                    className="pl-10 pr-4 h-10 w-[180px] rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none cursor-pointer hover:border-slate-300"
+                                    className="pl-10 pr-4 h-10 w-full md:w-[180px] rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none cursor-pointer hover:border-slate-300"
                                 >
                                     {mesesNomes.map((month, index) => (
                                         <option key={index} value={index.toString()}>{month}</option>
@@ -1079,19 +1243,18 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             {/* MODAL DETALHAMENTO DA CARTEIRA */}
             <Dialog open={modalInvestimentosAberto} onOpenChange={setModalInvestimentosAberto}>
                 <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
-                    <DialogHeader className="p-4 md:p-6 bg-white border-b border-slate-100">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div className="flex justify-between items-start md:block">
-                                <div>
-                                    <DialogTitle className="text-lg md:text-xl font-bold text-slate-800">Detalhamento da Carteira</DialogTitle>
-                                    <p className="text-slate-500 text-[10px] md:text-xs mt-1 uppercase tracking-wider">Histórico e Posição</p>
-                                </div>
-                                <div className="text-right md:hidden">
-                                    <p className="text-slate-400 text-[9px] uppercase font-bold">Total</p>
-                                    <p className="text-cyan-600 font-bold text-sm whitespace-nowrap">
-                                        R$ {investimentosTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                    </p>
-                                </div>
+                    <DialogHeader className="p-4 md:p-6 bg-white border-b border-slate-100 relative">
+                        <button
+                            onClick={() => setModalInvestimentosAberto(false)}
+                            className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all z-50"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pr-10">
+                            <div className="flex flex-col">
+                                <DialogTitle className="text-lg md:text-xl font-bold text-slate-800">Detalhamento da Carteira</DialogTitle>
+                                <p className="text-slate-500 text-[10px] md:text-xs mt-1 uppercase tracking-wider">Histórico e Posição</p>
                             </div>
 
                             <div className="relative w-full md:w-72">
@@ -1108,7 +1271,9 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             <div className="text-right hidden md:block border-l pl-6 border-slate-100">
                                 <p className="text-slate-400 text-[10px] uppercase font-bold">Patrimônio Total</p>
                                 <p className="text-cyan-600 font-bold text-xl whitespace-nowrap">
-                                    R$ {investimentosTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    {mostrarValores
+                                        ? `R$ ${investimentosTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                        : "R$ ••••••"}
                                 </p>
                             </div>
                         </div>
