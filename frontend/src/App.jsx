@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
+import { ForgotPassword } from './components/ForgotPassword';
 import { Dashboard } from './components/Dashboard';
 import { LoginScreen } from './components/LoginScreen';
 import { RegisterScreen } from './components/RegisterScreen';
@@ -33,7 +33,7 @@ function App() {
       if (error.response?.status === 401) handleLogout();
     }
   };
-
+  
   useEffect(() => {
     if (view === 'home' && user?.id) {
       buscarSaldo(user.id);
@@ -74,15 +74,24 @@ function App() {
 
   return (
     <div className="min-h-screen w-full bg-slate-50 font-sans antialiased text-slate-900">
-      {view === 'login' && <LoginScreen onLogin={handleLogin} onShowRegister={() => setView('register')} />}
+      {view === 'login' && (
+        <LoginScreen
+          onLogin={handleLogin}
+          onShowRegister={() => setView('register')}
+          onForgotPassword={() => setView('forgot')}
+        />
+      )}
+
       {view === 'register' && <RegisterScreen onRegister={handleRegister} onBackToLogin={() => setView('login')} />}
-      
+
+      {view === 'forgot' && <ForgotPassword onBackToLogin={() => setView('login')} />}
+
       {view === 'home' && user ? (
-        <Dashboard 
-          user={user} 
-          saldo={saldo} 
-          atualizarSaldo={() => buscarSaldo(user.id)} 
-          onLogout={handleLogout} 
+        <Dashboard
+          user={user}
+          saldo={saldo}
+          atualizarSaldo={() => buscarSaldo(user.id)}
+          onLogout={handleLogout}
         />
       ) : view === 'home' && <div className="p-10 text-center">Carregando...</div>}
 

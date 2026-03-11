@@ -6,7 +6,6 @@ import jwt from 'jsonwebtoken';
 
 const app = express();
 
-// --- CONFIGURAÇÕES ---
 app.use(express.json());
 app.use(cors({
     origin: '*',
@@ -17,7 +16,7 @@ app.use(cors({
 const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui_123";
 const PORT = process.env.PORT || 10000;
 
-// --- MIDDLEWARE DE AUTENTICAÇÃO ---
+
 function verificarToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -103,7 +102,6 @@ app.get('/transacoes/:userId', verificarToken, async (req, res) => {
 
 app.post('/transacoes', verificarToken, async (req, res) => {
     try {
-        // CORREÇÃO: Adicionado 'data' no destructuring
         const { descricao, valor, tipo, userId, data } = req.body;
         const nova = await prisma.transacoes.create({
             data: {
@@ -188,6 +186,21 @@ app.delete('/investimentos/:id', verificarToken, async (req, res) => {
         console.error("ERRO AO APAGAR INVESTIMENTO:", error);
         res.status(500).json({ error: "Erro ao apagar." });
     }
+});
+// --- ROTA: VERIFICAR E-MAIL PARA RECUPERAÇÃO ---
+app.post('/recuperar-senha', async (req, res) => {
+    const { email } = req.body;
+    const usuario = await prisma.usuarios.findUnique({ where: { email } });
+    if (!usuario) return res.status(404).json({ error: "E-mail não encontrado." });
+    res.json({ message: "OK" });
+});
+
+// --- ROTA: REDEFINIR A SENHA ---
+app.post('/redefinir-senha', async (req, res) => {
+    const { email, novaSenha } = req.body;
+    const senhaHash = await bcrypt.hash(novaSenha, 10);
+    await prisma.usuarios.update({ where: { email }, data: { senha: senhaHash } });
+    res.json({ message: "Senha alterada!" });
 });
 
 // Inicialização do Servidor
