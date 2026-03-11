@@ -2,22 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-// Adicionamos 'Calendar' na lista de ícones abaixo
 import {
     Wallet, ArrowUpCircle, ArrowDownCircle, DollarSign, LogOut,
     TrendingUp, Trash2, Plus, RefreshCw, Edit,
     ChevronDown, ChevronUp, Calendar, Search, Eye, EyeOff, X
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-
-// ESTA É A LINHA PRINCIPAL QUE ESTAVA FALTANDO:
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 import { toast } from 'react-toastify';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 
-// Daqui para baixo continua o seu código normal...
 export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
     if (!user) return <div className="p-8 text-center">Carregando usuário...</div>;
 
@@ -40,7 +36,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
     const fetchDolar = useCallback(async () => {
         try {
-            // Usando AwesomeAPI que é gratuita e não exige Token
             const response = await axios.get(`https://economia.awesomeapi.com.br/last/USD-BRL`);
 
             if (response.data && response.data.USDBRL) {
@@ -50,12 +45,10 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             }
         } catch (err) {
             console.warn("Erro ao buscar dólar (AwesomeAPI), mantendo valor padrão.");
-            // Não fazemos nada, o state já inicia com 5.50
         }
     }, []);
 
 
-    // Função para buscar preço de Ações/FIIs na API da Brapi
     const fetchCripto = async (ticker) => {
         try {
             const symbol = ticker.replace('USDT', '') + 'USDT';
@@ -69,7 +62,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
     const fetchAcaoB3 = async (ticker) => {
         try {
-            // Use o seu token da Brapi aqui
             const response = await axios.get(`https://brapi.dev/api/quote/${ticker}?token=SEU_TOKEN_AQUI`);
             return response.data.results[0].regularMarketPrice || 0;
         } catch (error) {
@@ -80,22 +72,14 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
     const transacoesFiltradas = React.useMemo(() => {
         return (historico || []).filter(item => {
-            // Pega a data do banco (createdAt ou data)
             const dataRaw = item.data || item.createdAt;
             if (!dataRaw) return false;
-
-            // Extraímos apenas a parte "AAAA-MM-DD" ignorando o resto (T00:00:00...)
             const apenasData = dataRaw.split('T')[0];
-            const partes = apenasData.split('-'); // [0]=Ano, [1]=Mês, [2]=Dia
-
+            const partes = apenasData.split('-'); 
             const anoTransacao = parseInt(partes[0]);
-            // No banco o mês vem 01, 02... No Select Janeiro é 0, então subtraímos 1
             const mesTransacao = parseInt(partes[1]) - 1;
-
             const mesAlvo = parseInt(mesSelecionado);
             const anoAlvo = parseInt(anoSelecionado);
-
-            // Comparação puramente numérica de texto extraído
             return mesTransacao === mesAlvo && anoTransacao === anoAlvo;
         });
     }, [historico, mesSelecionado, anoSelecionado]);
@@ -117,7 +101,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             saldo: entradas - saidas
         };
     }, [transacoesFiltradas]);
-    // 2. Calcula os totais baseados no que foi filtrado acima
     const totalEntradasMes = React.useMemo(() =>
         transacoesFiltradas
             .filter(t => t.tipo === 'entrada')
@@ -130,19 +113,15 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             .reduce((acc, t) => acc + Number(t.valor || 0), 0)
         , [transacoesFiltradas]);
 
-    // 3. Monta os dados do Gráfico de Pizza (Pie)
     const dadosTransacoes = React.useMemo(() => {
-        // 1. Soma as Entradas
         const entradas = transacoesFiltradas
             .filter(t => t.tipo === 'entrada')
             .reduce((acc, t) => acc + Number(t.valor), 0);
 
-        // 2. Soma as Saídas que NÃO são investimentos (não têm o 💎 ou [INVEST])
         const gastos = transacoesFiltradas
             .filter(t => t.tipo === 'saida' && !t.descricao?.includes('[INVEST]'))
             .reduce((acc, t) => acc + Number(t.valor), 0);
 
-        // 3. Soma apenas o que você marcou como Investimento (Botão Azul)
         const investimentos = transacoesFiltradas
             .filter(t => t.tipo === 'saida' && t.descricao?.includes('[INVEST]'))
             .reduce((acc, t) => acc + Number(t.valor), 0);
@@ -171,21 +150,18 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
     const CORES = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308'];
     const CORES_TIPOS_INV = {
-        'B3': '#06b6d4',     // Ciano
-        'Criptomoeda': '#f59e0b',    // Laranja
-        'CDB': '#10b981',    // Verde
-        'STOCKS': '#8b5cf6', // Roxo (ou a cor que preferir)
+        'B3': '#06b6d4',    
+        'Criptomoeda': '#f59e0b',    
+        'CDB': '#10b981',    
+        'STOCKS': '#8b5cf6', 
     };
 
-    // Gráfico 1: Investimentos (Com o campo 'tipo' para a cor)
     const dadosInvestimentos = React.useMemo(() => {
         const lista = Array.isArray(listaInvestimentos) ? listaInvestimentos : [];
 
         const agrupado = lista.reduce((acc, inv) => {
-            // Normaliza BTC para Criptomoeda para garantir a cor correta
             const tipoOriginal = (inv.tipo || 'OUTROS').toUpperCase();
             const tipoChave = tipoOriginal === 'BTC' ? 'Criptomoeda' : inv.tipo;
-
             const valorTotalJaCalculado = typeof inv.valor === 'string'
                 ? parseFloat(inv.valor.replace(',', '.'))
                 : Number(inv.valor);
@@ -196,19 +172,17 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         }, {});
 
         return Object.keys(agrupado).map(tipo => ({
-            name: tipo, // Agora aparecerá "Criptomoeda" em vez de "BTC"
+            name: tipo, 
             value: agrupado[tipo],
-            tipo: tipo  // Isso garante que CORES_TIPOS_INV['Criptomoeda'] seja encontrado
+            tipo: tipo 
         }));
     }, [listaInvestimentos]);
-    // Gráfico 2: Transações (Fixando Verde e Vermelho)
 
     const carregarInvestimentos = useCallback(async () => {
         const token = localStorage.getItem('token');
-        const DOLAR_FIXO = 5.20; // O valor que você definiu
+        const DOLAR_FIXO = 5.20; 
 
         try {
-            // Quando você hospedar seu backend, troque essa URL
             const response = await axios.get(`https://gerenciador-financeiro-1-6cpc.onrender.com/investimentos/${Number(user.id)}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -219,14 +193,12 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             const listaAtualizada = await Promise.all(investimentosDoBanco.map(async (inv) => {
                 let valorAtualizado = Number(inv.valor);
 
-                // Limpa o nome do ativo para não dar erro na API (remove emojis e espaços)
                 let ticker = inv.nome.split(' - ')[0]
                     .replace(/[^a-zA-Z0-9]/g, '')
                     .trim()
                     .toUpperCase();
 
                 try {
-                    // Busca preço atual na Brapi (Ações/Stocks)
                     if (inv.tipo === 'B3' || inv.tipo === 'STOCKS' || inv.nome.includes('[USD]')) {
                         const resBrapi = await axios.get(`https://brapi.dev/api/quote/${ticker}?token=jrNEWthxAUBTdjY1tsq5W9`);
 
@@ -235,7 +207,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             const qtd = Number(inv.quantidade) || 1;
 
                             if (inv.tipo === 'STOCKS' || inv.nome.includes('[USD]')) {
-                                // USA O SEU DÓLAR DE 5.20
                                 valorAtualizado = precoUnitario * DOLAR_FIXO * qtd;
                             } else {
                                 valorAtualizado = precoUnitario * qtd;
@@ -252,7 +223,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
             setListaInvestimentos(listaAtualizada);
             setInvestimentosTotal(totalAcumulado);
-            setDolar(5.20); // Atualiza o mostrador da tela
+            setDolar(5.20);
 
         } catch (error) {
             console.error("Erro ao carregar dados do banco:", error);
@@ -261,26 +232,23 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
     useEffect(() => {
         const inicializar = async () => {
-            await fetchDolar(); // Primeiro pega o dólar
+            await fetchDolar();
             carregarHistorico();
-            carregarInvestimentos(); // Agora os investimentos usam o dólar atualizado
+            carregarInvestimentos(); 
         };
         inicializar();
     }, [fetchDolar, carregarHistorico, carregarInvestimentos]);
 
     const dividendosEstimados = React.useMemo(() => {
         const lista = Array.isArray(listaInvestimentos) ? listaInvestimentos : [];
-
-        // Simulação de Dividend Yield médio mensal (Pode ser ajustado ou vir de uma API futura)
-        // FIIs (B3): ~0.8% ao mês | STOCKS: ~0.3% ao mês
         return lista.reduce((acc, inv) => {
             const valorAtivo = Number(inv.valor) || 0;
             let estimativaAtivo = 0;
 
             if (inv.tipo === 'B3') {
-                estimativaAtivo = valorAtivo * 0.008; // Estimativa de 0.8%
+                estimativaAtivo = valorAtivo * 0.008; 
             } else if (inv.tipo === 'STOCKS') {
-                estimativaAtivo = valorAtivo * 0.003; // Estimativa de 0.3%
+                estimativaAtivo = valorAtivo * 0.003; 
             }
 
             return acc + estimativaAtivo;
@@ -291,13 +259,11 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         const isCDB = inv.tipo === 'CDB';
         const isCripto = inv.tipo === 'Criptomoeda';
         const isStock = inv.tipo === 'STOCKS';
-
-        // Para Cripto e Stocks, usamos mais casas decimais no visual
         const casasDecimais = isCDB ? 2 : isStock ? 4 : isCripto ? 8 : 2;
 
         const valorInicial = isCDB
             ? Number(inv.valor).toFixed(2)
-            : Number(inv.quantidade).toString(); // Usamos toString para não forçar zeros desnecessários
+            : Number(inv.quantidade).toString(); 
 
         const { value: novoValorOuQtd } = await Swal.fire({
             title: `Editar ${inv.nome}`,
@@ -311,19 +277,11 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         if (novoValorOuQtd) {
             try {
                 const token = localStorage.getItem('token');
-
-                // CORREÇÃO DA LIMPEZA:
-                // 1. Se o usuário digitar "1.500,50", queremos "1500.50"
-                // 2. Se o usuário digitar "1.5", queremos "1.5"
-
                 let valorFormatado = novoValorOuQtd.trim();
-
-                // Se houver vírgula E ponto, o ponto é milhar. Ex: 1.500,50 -> 1500,50
                 if (valorFormatado.includes(',') && valorFormatado.includes('.')) {
                     valorFormatado = valorFormatado.replace(/\./g, '');
                 }
 
-                // Troca a vírgula pelo ponto decimal final
                 valorFormatado = valorFormatado.replace(',', '.');
 
                 const valorTratado = parseFloat(valorFormatado);
@@ -338,7 +296,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     dadosAtualizados.valor = valorTratado;
                     dadosAtualizados.quantidade = 1;
                 } else {
-                    // Para Cripto/Stocks, salvamos a quantidade com todos os decimais
                     dadosAtualizados.quantidade = valorTratado;
                 }
 
@@ -349,7 +306,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 );
 
                 toast.success("Atualizado!");
-                // IMPORTANTE: O carregarInvestimentos() vai multiplicar essa qtd pelo preço da API
                 carregarInvestimentos();
             } catch (error) {
                 toast.error("Erro ao salvar.");
@@ -365,7 +321,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
         ];
 
-        // 1. Modal para selecionar Mês e Ano
         const { value: busca } = await Swal.fire({
             title: 'Selecionar Período',
             html: `
@@ -400,8 +355,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         const totalSaidas = transacoesFiltradas
             .filter(t => t.tipo === 'saida')
             .reduce((acc, t) => acc + Number(t.valor), 0);
-
-        // 3. Exibe o extrato do período selecionado
         const htmlTabela = `
         <div style="text-align: left; font-family: sans-serif;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 20px; padding: 10px; background: #f8fafc; border-radius: 8px;">
@@ -481,30 +434,24 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                 let valorTotalAtivo = 0;
                 const tokenBrapi = "jrNEWthxAUBTdjY1tsq5W9";
                 const quantidadeInformada = parseFloat(formValues.qtd.replace(/\./g, '').replace(',', '.'));
-
-                // 1. BUSCA COTAÇÃO DO DÓLAR PARA CONVERSÕES
                 let cotacaoDolarAtual = 5.50;
                 try {
                     const resDolar = await axios.get(`https://brapi.dev/api/v2/currency?currency=USD&token=${tokenBrapi}`);
                     cotacaoDolarAtual = resDolar.data.currency[0].bidPrice || resDolar.data.currency[0].bid;
                 } catch (e) { console.error("Erro dólar, usando padrão"); }
 
-                // --- LÓGICA DE CRIPTO (CORRIGIDA) ---
                 if (formValues.tipo === 'Criptomoeda') {
                     const tickerLimpo = formValues.ticker.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
                     toast.info(`Buscando ${tickerLimpo} na Binance...`);
 
                     try {
-                        // Tenta BRL primeiro
                         try {
                             const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${tickerLimpo}BRL`);
                             precoUnitario = Number(res.data.price);
                         } catch {
-                            // Se falhar BRL, tenta USDT
                             const resUsdt = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${tickerLimpo}USDT`);
                             precoUnitario = Number(resUsdt.data.price) * cotacaoDolarAtual;
                         }
-                        // IMPORTANTE: Definir o nome com o ticker real digitado
                         nomeFinal = `Cripto - ${tickerLimpo}`;
                         valorTotalAtivo = Number((precoUnitario * quantidadeInformada).toFixed(2));
                     } catch (err) {
@@ -512,16 +459,13 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     }
                 }
 
-                // --- LÓGICA DE STOCKS ---
                 else if (formValues.tipo === 'STOCKS') {
                     const res = await axios.get(`https://brapi.dev/api/quote/${formValues.ticker}?token=${tokenBrapi}`);
-                    // Use o 'dolar' do seu state em vez de buscar da Brapi de novo
                     precoUnitario = res.data.results[0].regularMarketPrice * (dolar || 5.50);
                     nomeFinal = `🇺🇸 ${formValues.ticker} - ${res.data.results[0].longName}`;
                     valorTotalAtivo = Number((precoUnitario * quantidadeInformada).toFixed(2));
                 }
 
-                // --- LÓGICA DE B3 ---
                 else if (formValues.tipo === 'B3') {
                     const tickerBase = formValues.ticker.replace('.SA', '');
                     const res = await axios.get(`https://brapi.dev/api/quote/${tickerBase}?token=${tokenBrapi}`);
@@ -529,15 +473,12 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     nomeFinal = `${tickerBase} - ${res.data.results[0].longName}`;
                     valorTotalAtivo = Number((precoUnitario * quantidadeInformada).toFixed(2));
                 }
-
-                // --- LÓGICA DE CDB ---
                 else if (formValues.tipo === 'CDB') {
                     nomeFinal = `CDB - ${formValues.ticker}`;
                     valorTotalAtivo = quantidadeInformada;
                     precoUnitario = valorTotalAtivo;
                 }
 
-                // --- SALVAMENTO ---
                 const token = localStorage.getItem('token');
                 const ativoExistente = listaInvestimentos.find(inv =>
                     inv.tipo === formValues.tipo &&
@@ -593,13 +534,10 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
         if (!valor || !descricao || !dataTransacao) {
             return toast.warn("Preencha todos os campos!");
         }
-
-        // Lógica: se for categoria investimento, adiciona o prefixo para o gráfico ler
         const descricaoFinal = categoriaSelecionada === 'investimento'
             ? `[INVEST] ${descricao}`
             : descricao;
 
-        // O "tipo" para o banco de dados continua sendo entrada ou saida
         const tipoFinal = categoriaSelecionada === 'entrada' ? 'entrada' : 'saida';
 
         try {
@@ -618,10 +556,9 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
             toast.success("Movimentação registrada!");
 
-            // Resetar campos
             setValor('');
             setDescricao('');
-            setCategoriaSelecionada('saida'); // Volta para o padrão
+            setCategoriaSelecionada('saida');
 
             carregarHistorico();
             if (atualizarSaldo) atualizarSaldo();
@@ -631,13 +568,10 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             toast.error("Erro ao salvar.");
         }
     };
-    // 1. Adicionamos 'categoria' aqui nos parâmetros
     const handleNovaTransacao = async (tipo, categoria = 'comum') => {
         if (!valor || !descricao || !dataTransacao) {
             return toast.warn("Preencha todos os campos!");
         }
-
-        // 2. Criamos a descrição final (usando apenas [INVEST] para bater com o gráfico)
         const descricaoFinal = categoria === 'investimento'
             ? `[INVEST] ${descricao}`
             : descricao;
@@ -647,7 +581,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             const valorNumerico = parseFloat(valor.replace(',', '.'));
 
             await axios.post(`https://gerenciador-financeiro-1-6cpc.onrender.com/transacoes`, {
-                descricao: descricaoFinal, // 3. IMPORTANTE: Enviamos a descricaoFinal aqui!
+                descricao: descricaoFinal,
                 valor: valorNumerico,
                 tipo: tipo,
                 userId: Number(user.id),
@@ -655,8 +589,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-
-            // Ajuste no Toast para ficar bonito
             const msgSucesso = categoria === 'investimento' ? 'Investimento registrado!' :
                 (tipo === 'entrada' ? 'Receita registrada!' : 'Despesa registrada!');
 
@@ -687,14 +619,12 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             </div>
 
             <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3 mb-8 items-stretch">
-                {/* CARD DE SALDO BANCÁRIO */}
-                <Card className={`relative overflow-hidden border-none shadow-xl h-[340px] flex flex-col text-white transition-all duration-700 ${(saldo || 0) > 0
-                        ? "bg-gradient-to-br from-emerald-600 to-emerald-800" // Verde: Positivo
+                <Card className={`relative overflow-hidden border-none shadow-xl h-85 flex flex-col text-white transition-all duration-700 ${(saldo || 0) > 0
+                        ? "bg-linear-to-br from-emerald-600 to-emerald-800" 
                         : (saldo || 0) < 0
-                            ? "bg-gradient-to-br from-red-600 to-red-900"    // Vermelho: Negativo
-                            : "bg-gradient-to-br from-slate-600 to-slate-800" // Cinza/Azul: Zero
+                            ? "bg-linear-to-br from-red-600 to-red-900"   
+                            : "bg-linear-to-br from-slate-600 to-slate-800" 
                     }`}>
-                    {/* Círculo decorativo de fundo */}
                     <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
 
                     <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
@@ -740,8 +670,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </div>
                 </Card>
 
-                {/* CARD DE MOVIMENTAÇÃO */}
-                <Card className="shadow-md border-slate-200 bg-white overflow-hidden">
+                <Card className="shadow-md border-slate-200 bg-white overflow-hidden ">
                     <div className={`h-1 w-full ${categoriaSelecionada === 'entrada' ? 'bg-emerald-500' :
                         categoriaSelecionada === 'investimento' ? 'bg-cyan-500' : 'bg-rose-500'
                         } transition-colors duration-300`} />
@@ -753,7 +682,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </CardHeader>
 
                     <CardContent className="space-y-4">
-                        {/* Seletor de Categoria */}
+
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Tipo de Transação</label>
                             <select
@@ -767,7 +696,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             </select>
                         </div>
 
-                        {/* Descrição */}
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Descrição</label>
                             <Input
@@ -778,7 +706,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             />
                         </div>
 
-                        {/* Valor e Data em Grid */}
+
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Valor R$</label>
@@ -800,7 +728,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             </div>
                         </div>
 
-                        {/* Botão de Ação */}
                         <Button
                             onClick={handleSalvarMovimentacao}
                             className={`w-full h-12 rounded-xl text-white font-bold shadow-lg transition-all active:scale-95 ${categoriaSelecionada === 'entrada' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' :
@@ -813,8 +740,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </CardContent>
                 </Card>
 
-                {/* CARD DE INVESTIMENTOS COM DIVIDENDOS INTEGRADOS */}
-                <Card className="relative overflow-hidden border-none shadow-2xl h-[340px] flex flex-col bg-[#020617] text-white !bg-[#020617]">
+                <Card className="relative overflow-hidden border-none shadow-2xl h-85 flex flex-col bg-[#020617] text-white !bg-[#020617]">
                     <div className="absolute -left-16 -bottom-16 w-64 h-64 bg-cyan-950/40 rounded-full blur-[80px] pointer-events-none" />
 
                     <CardHeader className="pb-2 relative z-10">
@@ -866,7 +792,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-6xl mx-auto mb-8">
 
-                {/* CARD DE TRANSAÇÕES (RECEITAS VS DESPESAS) */}
                 <Card className="shadow-md border-slate-200 bg-white">
                     <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-slate-50">
                         <CardTitle className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
@@ -897,7 +822,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                         </div>
                     </CardHeader>
 
-                    <CardContent className="h-[350px] w-full pt-6">
+                    <CardContent className="h-87.5 w-full pt-6">
                         {dadosTransacoes.length > 0 ? (
                             <div style={{ width: '100%', height: '300px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
@@ -913,7 +838,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                             {dadosTransacoes.map((entry, index) => (
                                                 <Cell
                                                     key={`cell-${index}`}
-                                                    fill={entry.color} // Usa a cor definida na lógica (Verde, Vermelho ou Azul)
+                                                    fill={entry.color} 
                                                 />
                                             ))}
                                         </Pie>
@@ -932,12 +857,11 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                         )}
                     </CardContent>
                 </Card>
-                {/* CARD DE INVESTIMENTOS (POR ATIVO) */}
                 <Card className="shadow-md border-slate-200 bg-white">
                     <CardHeader>
                         <CardTitle className="text-sm font-bold text-slate-500 uppercase">Distribuição por Ativo</CardTitle>
                     </CardHeader>
-                    <CardContent className="h-[300px]">
+                    <CardContent className="h-75">
                         {dadosInvestimentos && dadosInvestimentos.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
@@ -952,7 +876,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                         {dadosInvestimentos.map((entry, index) => (
                                             <Cell
                                                 key={`cell-inv-${index}`}
-                                                // Usa a cor do tipo, se não existir na lista, usa uma cor padrão
                                                 fill={CORES_TIPOS_INV[entry.tipo] || '#94a3b8'}
                                             />
                                         ))}
@@ -974,7 +897,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             </div>
             <div className="max-w-6xl mx-auto grid gap-6 grid-cols-1 lg:grid-cols-2 items-start">
 
-                {/* CARD EXTRATO - PADRONIZADO */}
                 <Card className="shadow-md border-slate-200 overflow-hidden bg-white">
                     <CardHeader
                         className="border-b bg-slate-50/50 flex flex-row items-center justify-between cursor-pointer p-4 md:p-6"
@@ -998,8 +920,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                         </div>
                     </CardHeader>
 
-                    {/* ÁREA DE CONTEÚDO COM SCROLL E ANIMAÇÃO */}
-                    <div className={`transition-all duration-300 ease-in-out ${extratoAberto ? 'max-h-[450px] overflow-y-auto' : 'max-h-0 overflow-hidden'}`}>
+                    <div className={`transition-all duration-300 ease-in-out ${extratoAberto ? 'max-h-112.5 overflow-y-auto' : 'max-h-0 overflow-hidden'}`}>
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left border-collapse">
@@ -1017,7 +938,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                             .map((t) => (
                                                 <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                                                     <td className="px-4 py-3">
-                                                        <div className="text-slate-600 font-medium text-xs truncate max-w-[120px] md:max-w-none">{t.descricao}</div>
+                                                        <div className="text-slate-600 font-medium text-xs truncate max-w-30 md:max-w-none">{t.descricao}</div>
                                                         <div className="text-[10px] text-slate-400">
                                                             {new Date(t.data || t.createdAt).toLocaleDateString('pt-BR')}
                                                         </div>
@@ -1039,7 +960,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </div>
                 </Card>
 
-                {/* CARD CARTEIRA DE ATIVOS - PADRONIZADO */}
                 <Card className="shadow-md border-slate-200 overflow-hidden bg-white">
                     <CardHeader
                         className="border-b bg-slate-50/50 flex flex-row items-center justify-between cursor-pointer p-4 md:p-6"
@@ -1055,7 +975,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             <p className="text-[10px] text-slate-500 uppercase tracking-wider">Patrimônio alocado</p>
                         </div>
                         <div className="flex items-center gap-4">
-                            {/* BOTÃO DETALHADO IGUAL AO DO EXTRATO */}
                             <Button
                                 onClick={(e) => { e.stopPropagation(); setModalInvestimentosAberto(true); }}
                                 variant="outline"
@@ -1074,7 +993,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                         </div>
                     </CardHeader>
 
-                    <div className={`transition-all duration-300 ease-in-out ${carteiraAberta ? 'max-h-[450px] overflow-y-auto' : 'max-h-0 overflow-hidden'}`}>
+                    <div className={`transition-all duration-300 ease-in-out ${carteiraAberta ? 'max-h-112.5 overflow-y-auto' : 'max-h-0 overflow-hidden'}`}>
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left border-collapse">
@@ -1125,9 +1044,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
             </div>
             <Dialog open={modalExtratoAberto} onOpenChange={setModalExtratoAberto}>
                 <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden bg-white p-0 border border-slate-200 shadow-2xl">
-                    {/* Cabeçalho Claro e Minimalista */}
                     <DialogHeader className="p-6 bg-white border-b border-slate-100 relative">
-                        {/* BOTÃO DE FECHAR */}
                         <button
                             onClick={() => setModalExtratoAberto(false)}
                             className="absolute right-4 top-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all z-50"
@@ -1136,7 +1053,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                         </button>
 
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pr-8">
-                            {/* pr-8 garante que o texto não bata no botão de fechar em telas menores */}
                             <div>
                                 <DialogTitle className="text-2xl font-bold text-slate-800 tracking-tight">
                                     Extrato Detalhado
@@ -1151,7 +1067,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                 <select
                                     value={mesSelecionado}
                                     onChange={(e) => setMesSelecionado(e.target.value)}
-                                    className="pl-10 pr-4 h-10 w-full md:w-[180px] rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none cursor-pointer hover:border-slate-300"
+                                    className="pl-10 pr-4 h-10 w-full md:w-45 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none cursor-pointer hover:border-slate-300"
                                 >
                                     {mesesNomes.map((month, index) => (
                                         <option key={index} value={index.toString()}>{month}</option>
@@ -1162,7 +1078,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </DialogHeader>
 
                     <div className="p-6 overflow-y-auto max-h-[calc(85vh-120px)] bg-white">
-                        {/* Cards de Resumo com Cores Suaves */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                             <div className="p-5 bg-emerald-50/50 border border-emerald-100 rounded-2xl transition-all hover:shadow-sm">
                                 <div className="flex items-center gap-2 mb-1">
@@ -1189,7 +1104,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                             </div>
                         </div>
 
-                        {/* Tabela Clean */}
                         <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50/50 border-b border-slate-100">
@@ -1209,7 +1123,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                                     <div className="text-[10px] flex items-center gap-1 text-slate-400 mt-1">
                                                         {(() => {
                                                             const d = new Date(t.createdAt || t.data);
-                                                            // Ajuste para evitar que a data mude devido ao fuso horário
                                                             if (!(t.createdAt || t.data).includes('T')) {
                                                                 d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
                                                             }
@@ -1240,7 +1153,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     </div>
                 </DialogContent>
             </Dialog>
-            {/* MODAL DETALHAMENTO DA CARTEIRA */}
             <Dialog open={modalInvestimentosAberto} onOpenChange={setModalInvestimentosAberto}>
                 <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
                     <DialogHeader className="p-4 md:p-6 bg-white border-b border-slate-100 relative">
@@ -1282,7 +1194,7 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                     <div className="flex-1 overflow-y-auto p-2 md:p-6 bg-slate-50/50">
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse min-w-[600px] md:min-w-full">
+                                <table className="w-full text-left border-collapse min-w-150 md:min-w-full">
                                     <thead className="bg-slate-50 text-slate-600 text-[10px] md:text-[11px] font-bold uppercase border-b border-slate-100 sticky top-0">
                                         <tr>
                                             <th className="px-3 md:px-6 py-4 hidden sm:table-cell">Data</th>
@@ -1322,8 +1234,6 @@ export function Dashboard({ user, saldo, onLogout, atualizarSaldo }) {
                                                         <td className="px-3 md:px-6 py-4 text-center font-medium text-slate-600 text-xs md:text-sm whitespace-nowrap">
                                                             {qtdCompleta}
                                                         </td>
-
-                                                        {/* ADICIONADO whitespace-nowrap ABAIXO */}
                                                         <td className="px-4 md:px-6 py-4 text-right font-bold text-slate-700 text-xs md:text-sm whitespace-nowrap">
                                                             R$ {valorAtivo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </td>
